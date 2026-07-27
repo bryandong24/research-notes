@@ -1,0 +1,66 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const notes = (await getCollection("notes")).sort(
+  (a, b) => b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf()
+);
+const base = import.meta.env.BASE_URL;
+const formatDate = (date: Date) =>
+  new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  }).format(date);
+---
+
+<BaseLayout
+  title="Bryan’s Research Notes · Task-aware visual computation"
+  description="Technical notes on foveated perception for robot policies and world-action models."
+>
+  <div class="home-shell">
+    <section class="home-hero">
+      <div>
+        <p class="eyebrow">Foveated perception · Robot learning</p>
+        <h1>Research notes on where robots should look.</h1>
+        <p class="home-hero__lede">
+          Experiments toward models that spend high-resolution computation only where it
+          changes the action.
+        </p>
+      </div>
+      <aside class="home-hero__aside">
+        <strong>Current question</strong>
+        <p>
+          Can action-conditioned relevance from a generalist VLA or world-action model
+          supervise a small, causal gaze policy?
+        </p>
+      </aside>
+    </section>
+
+    <section class="archive" id="notes" aria-labelledby="notes-title">
+      <div class="section-heading">
+        <h2 id="notes-title">Research notes</h2>
+        <span>{String(notes.length).padStart(2, "0")} entries</span>
+      </div>
+      <ol class="note-list">
+        {
+          notes.map((note) => (
+            <li class="note-card">
+              <time datetime={note.data.publishedAt.toISOString()}>
+                {formatDate(note.data.publishedAt)}
+              </time>
+              <div>
+                <p class="eyebrow">{note.data.eyebrow}</p>
+                <h3>
+                  <a href={`${base}${note.id}/`}>{note.data.title}</a>
+                </h3>
+                <p>{note.data.summary}</p>
+              </div>
+              <span class="note-card__arrow" aria-hidden="true">↗</span>
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+  </div>
+</BaseLayout>

@@ -1,0 +1,19 @@
+---
+const base = import.meta.env.BASE_URL;
+---
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="wordmark" href={base} aria-label="Research Notes home">
+      <span class="wordmark__mark" aria-hidden="true">φ</span>
+      <span>
+        <strong>Bryan’s Research Notes</strong>
+        <small>Task-aware visual computation</small>
+      </span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href={`${base}#notes`}>Notes</a>
+      <a href={`${base}2026/where-should-a-robot-look/`}>Latest result</a>
+    </nav>
+  </div>
+</header>

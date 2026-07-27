@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f4efe4"/>
+  <path d="M0 84h1200M0 546h1200" stroke="#cfc2ad"/>
+  <circle cx="1020" cy="315" r="145" fill="none" stroke="#a8492f" stroke-width="3"/>
+  <circle cx="1020" cy="315" r="66" fill="#a8492f" opacity=".13"/>
+  <circle cx="1020" cy="315" r="14" fill="#a8492f"/>
+  <text x="92" y="156" fill="#a8492f" font-family="Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="4">RESEARCH NOTES · ROBOT PERCEPTION</text>
+  <text x="92" y="292" fill="#26211a" font-family="Georgia, serif" font-size="78">Where should</text>
+  <text x="92" y="383" fill="#26211a" font-family="Georgia, serif" font-size="78">a robot look?</text>
+  <text x="94" y="465" fill="#665d51" font-family="Arial, sans-serif" font-size="28">Task-aware foveation beats generic visual saliency.</text>
+</svg>

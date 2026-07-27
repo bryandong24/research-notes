@@ -1,0 +1,12 @@
+---
+interface Props {
+  label?: string;
+}
+
+const { label = "Takeaway" } = Astro.props;
+---
+
+<aside class="callout wide-block">
+  <slot />
+  <small>{label}</small>
+</aside>

@@ -1,0 +1,112 @@
+<figure class="pipeline wide-block" aria-labelledby="pipeline-title">
+  <figcaption id="pipeline-title">
+    The research trajectory: use a large model as an offline teacher, then deploy a small
+    causal selector.
+  </figcaption>
+  <div class="pipeline__flow">
+    <div class="pipeline__node pipeline__node--teacher">
+      <span>Offline teacher</span>
+      <strong>Generalist VLA / WAM</strong>
+      <small>Action-conditioned relevance</small>
+    </div>
+    <span class="pipeline__arrow" aria-hidden="true">→</span>
+    <div class="pipeline__node pipeline__node--selector">
+      <span>Distillation</span>
+      <strong>Small gaze policy</strong>
+      <small>Low-res context → HR locations</small>
+    </div>
+    <span class="pipeline__arrow" aria-hidden="true">→</span>
+    <div class="pipeline__node pipeline__node--policy">
+      <span>Deployment</span>
+      <strong>Lightweight policy</strong>
+      <small>Global context + selected detail</small>
+    </div>
+  </div>
+</figure>
+
+<style>
+  .pipeline {
+    padding: clamp(1.25rem, 3vw, 2.2rem);
+    border-top: 1px solid var(--rule-dark);
+    border-bottom: 1px solid var(--rule-dark);
+  }
+
+  figcaption {
+    max-width: 760px;
+    margin: 0 auto 1.5rem;
+    color: var(--ink-soft);
+    font-size: 0.76rem;
+    text-align: center;
+  }
+
+  .pipeline__flow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: stretch;
+  }
+
+  .pipeline__node {
+    padding: 1.2rem;
+    border: 1px solid var(--rule);
+    background: var(--paper-raised);
+    text-align: center;
+  }
+
+  .pipeline__node span,
+  .pipeline__node strong,
+  .pipeline__node small {
+    display: block;
+  }
+
+  .pipeline__node span {
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .pipeline__node strong {
+    margin-top: 0.3rem;
+    font-family: var(--serif);
+    font-size: 1.35rem;
+    font-weight: 550;
+  }
+
+  .pipeline__node small {
+    margin-top: 0.35rem;
+    color: var(--ink-soft);
+    font-size: 0.7rem;
+  }
+
+  .pipeline__node--teacher {
+    --accent: var(--blue);
+  }
+
+  .pipeline__node--selector {
+    --accent: var(--rust);
+  }
+
+  .pipeline__node--policy {
+    --accent: var(--teal);
+  }
+
+  .pipeline__arrow {
+    align-self: center;
+    color: var(--rule-dark);
+    font-family: var(--serif);
+    font-size: 1.6rem;
+  }
+
+  @media (max-width: 760px) {
+    .pipeline__flow {
+      grid-template-columns: 1fr;
+    }
+
+    .pipeline__arrow {
+      transform: rotate(90deg);
+      justify-self: center;
+    }
+  }
+</style>

@@ -1,0 +1,27 @@
+{
+  "name": "research-notes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "dev": "astro dev",
+    "prebuild": "pnpm test && pnpm audit:repo && pnpm audit:public",
+    "build": "astro check && astro build",
+    "postbuild": "pnpm audit:dist",
+    "preview": "astro preview",
+    "check": "astro check",
+    "test": "node --test",
+    "audit:repo": "node scripts/audit-public-tree.mjs . --repo",
+    "audit:public": "node scripts/audit-public-tree.mjs public --require-media",
+    "audit:dist": "node scripts/audit-public-tree.mjs dist --require-media --built"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "7.0.4",
+    "astro": "7.1.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "6.0.3"
+  }
+}

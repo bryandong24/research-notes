@@ -1,0 +1,121 @@
+---
+interface Item {
+  value: string;
+  label: string;
+  note: string;
+  accent?: "rust" | "blue" | "gray" | "gold" | "teal";
+}
+
+interface Props {
+  items: Item[];
+  caption?: string;
+}
+
+const { items, caption } = Astro.props;
+---
+
+<figure class="stat-strip wide-block" aria-label={caption ?? "Headline results"}>
+  <div class="stat-strip__grid">
+    {
+      items.map((item) => (
+        <div class={`stat stat--${item.accent ?? "gray"}`}>
+          <strong>{item.value}</strong>
+          <span>{item.label}</span>
+          <small>{item.note}</small>
+        </div>
+      ))
+    }
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .stat-strip {
+    padding: clamp(1.2rem, 2.5vw, 2rem);
+    border: 1px solid var(--rule-dark);
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+  }
+
+  .stat-strip__grid {
+    display: grid;
+    grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
+    gap: 0;
+  }
+
+  .stat {
+    min-width: 0;
+    padding: 0.5rem clamp(1rem, 2.5vw, 2rem);
+    border-left: 3px solid var(--accent);
+  }
+
+  .stat:first-child {
+    padding-left: 1rem;
+  }
+
+  .stat strong,
+  .stat span,
+  .stat small {
+    display: block;
+  }
+
+  .stat strong {
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: clamp(2.6rem, 5vw, 4.6rem);
+    font-weight: 500;
+    letter-spacing: -0.05em;
+    line-height: 1;
+  }
+
+  .stat span {
+    margin-top: 0.55rem;
+    font-weight: 750;
+  }
+
+  .stat small {
+    margin-top: 0.25rem;
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .stat--rust {
+    --accent: var(--rust);
+  }
+
+  .stat--blue {
+    --accent: var(--blue);
+  }
+
+  .stat--gray {
+    --accent: var(--gray);
+  }
+
+  .stat--gold {
+    --accent: var(--gold);
+  }
+
+  .stat--teal {
+    --accent: var(--teal);
+  }
+
+  figcaption {
+    margin-top: 1.25rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+  }
+
+  @media (max-width: 700px) {
+    .stat-strip__grid {
+      grid-template-columns: 1fr;
+      gap: 1.2rem;
+    }
+
+    .stat {
+      padding: 0.25rem 0 0.25rem 1rem;
+    }
+  }
+</style>

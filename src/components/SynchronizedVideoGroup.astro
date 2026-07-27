@@ -1,0 +1,779 @@
+---
+import type { VideoSource } from "../lib/sources";
+
+interface Props {
+  id: string;
+  title: string;
+  description: string;
+  items: VideoSource[];
+  selectable?: boolean;
+  visibleCount?: number;
+  initialIds?: string[];
+  compact?: boolean;
+}
+
+const {
+  id,
+  title,
+  description,
+  items,
+  selectable = false,
+  visibleCount = 3,
+  initialIds = [],
+  compact = false
+} = Astro.props;
+const base = import.meta.env.BASE_URL;
+const assetUrl = (path: string) => `${base}${path.replace(/^\/+/, "")}`;
+const hydratedItems = items.map((item) => ({ ...item, src: assetUrl(item.src) }));
+const panels = selectable
+  ? Array.from({ length: visibleCount }, (_, index) => {
+      const requested = initialIds[index];
+      return (
+        hydratedItems.find((item) => item.id === requested) ??
+        hydratedItems[index % hydratedItems.length]
+      );
+    })
+  : hydratedItems;
+---
+
+<section
+  class:list={["sync-comparison", "wide-block", { "sync-comparison--compact": compact }]}
+  data-sync-group
+  data-group-id={id}
+  data-selectable={String(selectable)}
+  aria-labelledby={`${id}-title`}
+>
+  <header class="sync-comparison__header">
+    <div>
+      <p class="sync-comparison__kicker">Synchronized comparison</p>
+      <h3 id={`${id}-title`}>{title}</h3>
+      <p>{description}</p>
+    </div>
+    <div class="sync-comparison__controls" aria-label={`Playback controls for ${title}`}>
+      <button type="button" data-play aria-pressed="false">
+        <span aria-hidden="true">▶</span>
+        <span data-play-label>Play all</span>
+      </button>
+      <button type="button" data-restart>
+        <span aria-hidden="true">↺</span>
+        Restart
+      </button>
+      <label>
+        <span>Speed</span>
+        <select data-speed aria-label={`Playback speed for ${title}`}>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  {
+    selectable && (
+      <div class="sync-comparison__mobile-tabs" role="tablist" aria-label={`${title} panels`}>
+        {panels.map((item, index) => (
+          <button
+            type="button"
+            role="tab"
+            id={`${id}-tab-${index}`}
+            aria-controls={`${id}-panel-${index}`}
+            aria-selected={index === 0 ? "true" : "false"}
+            tabindex={index === 0 ? "0" : "-1"}
+            data-mobile-tab
+            data-panel-index={String(index)}
+          >
+            {item.shortLabel}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  <div
+    class:list={[
+      "sync-comparison__grid",
+      { "sync-comparison__grid--all": !selectable }
+    ]}
+  >
+    {
+      panels.map((item, index) => (
+        <article
+          class={`video-panel video-panel--${item.accent}`}
+          data-video-panel
+          data-source-id={item.id}
+          data-panel-index={String(index)}
+          data-mobile-active={index === 0 ? "true" : "false"}
+          id={`${id}-panel-${index}`}
+          role={selectable ? "tabpanel" : undefined}
+          aria-labelledby={selectable ? `${id}-tab-${index}` : undefined}
+        >
+          <div class="video-panel__heading">
+            {selectable ? (
+              <label>
+                <span class="sr-only">Source for panel {index + 1}</span>
+                <select data-source-select aria-label={`Source for panel ${index + 1}`}>
+                  {hydratedItems.map((option) => (
+                    <option value={option.id} selected={option.id === item.id}>
+                      {option.shortLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <strong data-source-label>{item.shortLabel}</strong>
+            )}
+            {item.outcome && <span data-outcome>{item.outcome}</span>}
+          </div>
+
+          <div class="video-panel__viewport">
+            <video
+              data-video
+              src={item.src}
+              poster={item.src.replace(/\.mp4$/i, ".webp")}
+              muted
+              playsinline
+              preload="metadata"
+              aria-label={`${item.label}: ${item.description}`}
+            />
+            <p class="video-panel__error" data-video-error hidden>
+              Preview unavailable.
+              <a href={item.src} data-open-video>Open the source video</a>.
+            </p>
+          </div>
+
+          <div class="video-panel__caption">
+            <strong data-long-label>{item.label}</strong>
+            <p data-description>{item.description}</p>
+            {item.aggregate && <small data-aggregate>{item.aggregate}</small>}
+          </div>
+        </article>
+      ))
+    }
+  </div>
+
+  <div class="sync-comparison__timeline">
+    <label for={`${id}-timeline`}>Shared timeline</label>
+    <input
+      id={`${id}-timeline`}
+      type="range"
+      min="0"
+      max="12"
+      step="0.04"
+      value="0"
+      data-timeline
+      aria-describedby={`${id}-time`}
+    />
+    <output id={`${id}-time`} data-time>00:00 / --:--</output>
+  </div>
+  <p class="sr-only" data-status aria-live="polite">Videos paused at the beginning.</p>
+
+  <script
+    type="application/json"
+    is:inline
+    data-source-manifest
+    set:html={JSON.stringify(hydratedItems)}
+  />
+</section>
+
+<script>
+  import {
+    claimGroupInitialization,
+    sourceSwitchPlan,
+    unavailableSourceIds
+  } from "../scripts/sync-video-state.mjs";
+
+  type SourceMeta = {
+    id: string;
+    shortLabel: string;
+    label: string;
+    description: string;
+    src: string;
+    accent: string;
+    outcome?: string;
+    aggregate?: string;
+  };
+
+  const formatTime = (seconds: number) => {
+    if (!Number.isFinite(seconds)) return "--:--";
+    const whole = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(whole / 60);
+    const remainder = whole % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  };
+
+  document.querySelectorAll<HTMLElement>("[data-sync-group]").forEach((group) => {
+    if (!claimGroupInitialization(group)) return;
+
+    const manifestElement = group.querySelector<HTMLScriptElement>("[data-source-manifest]");
+    const manifest: SourceMeta[] = manifestElement?.textContent
+      ? JSON.parse(manifestElement.textContent)
+      : [];
+    const sourceById = new Map(manifest.map((source) => [source.id, source]));
+    const playButton = group.querySelector<HTMLButtonElement>("[data-play]");
+    const playLabel = group.querySelector<HTMLElement>("[data-play-label]");
+    const restartButton = group.querySelector<HTMLButtonElement>("[data-restart]");
+    const speedSelect = group.querySelector<HTMLSelectElement>("[data-speed]");
+    const slider = group.querySelector<HTMLInputElement>("[data-timeline]");
+    const timeOutput = group.querySelector<HTMLOutputElement>("[data-time]");
+    const status = group.querySelector<HTMLElement>("[data-status]");
+
+    if (!playButton || !playLabel || !restartButton || !speedSelect || !slider || !timeOutput) {
+      return;
+    }
+
+    let timeline = 0;
+    let playing = false;
+    let speed = 1;
+    let anchorTime = 0;
+    let anchorPerformance = 0;
+    let animationFrame = 0;
+
+    const videos = () =>
+      Array.from(group.querySelectorAll<HTMLVideoElement>("[data-video]"));
+
+    const duration = () => {
+      const finiteDurations = videos()
+        .map((video) => video.duration)
+        .filter((value) => Number.isFinite(value) && value > 0);
+      return finiteDurations.length ? Math.max(...finiteDurations) : 0;
+    };
+
+    const setStatus = (message: string) => {
+      if (status) status.textContent = message;
+    };
+
+    const updateReadout = () => {
+      const max = duration();
+      slider.max = String(max || 12);
+      slider.value = String(Math.min(timeline, max || timeline));
+      timeOutput.textContent = `${formatTime(timeline)} / ${formatTime(max)}`;
+    };
+
+    const seekVideos = (force = false) => {
+      for (const video of videos()) {
+        if (!Number.isFinite(video.duration) || video.readyState === 0) continue;
+        const target = Math.min(timeline, Math.max(0, video.duration - 0.04));
+        if (force || Math.abs(video.currentTime - target) > 0.075) {
+          video.currentTime = target;
+        }
+        if (playing && timeline < video.duration - 0.04) {
+          void video.play().catch(() => undefined);
+        } else {
+          video.pause();
+        }
+      }
+      updateReadout();
+    };
+
+    const stop = (message = "Videos paused.") => {
+      playing = false;
+      cancelAnimationFrame(animationFrame);
+      for (const video of videos()) video.pause();
+      playLabel.textContent = "Play all";
+      playButton.querySelector("[aria-hidden='true']")!.textContent = "▶";
+      playButton.setAttribute("aria-pressed", "false");
+      setStatus(message);
+      updateReadout();
+    };
+
+    const tick = (now: number) => {
+      if (!playing) return;
+      timeline = anchorTime + ((now - anchorPerformance) / 1000) * speed;
+      const max = duration();
+      if (max > 0 && timeline >= max) {
+        timeline = max;
+        seekVideos(true);
+        stop("All videos reached the end.");
+        return;
+      }
+      seekVideos();
+      animationFrame = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      const max = duration();
+      if (max > 0 && timeline >= max - 0.04) timeline = 0;
+      playing = true;
+      anchorTime = timeline;
+      anchorPerformance = performance.now();
+      playLabel.textContent = "Pause all";
+      playButton.querySelector("[aria-hidden='true']")!.textContent = "Ⅱ";
+      playButton.setAttribute("aria-pressed", "true");
+      setStatus("All videos playing in sync.");
+      seekVideos(true);
+      animationFrame = requestAnimationFrame(tick);
+    };
+
+    const reset = () => {
+      stop("Videos reset to the beginning.");
+      timeline = 0;
+      seekVideos(true);
+    };
+
+    const showError = (video: HTMLVideoElement) => {
+      const panel = video.closest<HTMLElement>("[data-video-panel]");
+      panel?.querySelector<HTMLElement>("[data-video-error]")?.removeAttribute("hidden");
+    };
+
+    const attachVideoEvents = (video: HTMLVideoElement) => {
+      video.addEventListener("loadedmetadata", () => {
+        video
+          .closest<HTMLElement>("[data-video-panel]")
+          ?.querySelector<HTMLElement>("[data-video-error]")
+          ?.setAttribute("hidden", "");
+        updateReadout();
+      });
+      video.addEventListener("error", () => showError(video));
+    };
+
+    for (const video of videos()) attachVideoEvents(video);
+
+    const updateDuplicateOptions = () => {
+      const selects = Array.from(
+        group.querySelectorAll<HTMLSelectElement>("[data-source-select]")
+      );
+      const selectedIds = selects.map((select) => select.value);
+      for (const select of selects) {
+        const unavailable = unavailableSourceIds(selectedIds, select.value);
+        for (const option of Array.from(select.options)) {
+          option.disabled = unavailable.has(option.value);
+        }
+      }
+    };
+
+    group.querySelectorAll<HTMLSelectElement>("[data-source-select]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const source = sourceById.get(select.value);
+        const panel = select.closest<HTMLElement>("[data-video-panel]");
+        const video = panel?.querySelector<HTMLVideoElement>("[data-video]");
+        if (!source || !panel || !video) return;
+
+        panel.dataset.sourceId = source.id;
+        panel.className = panel.className.replace(/video-panel--\S+/g, "").trim();
+        panel.classList.add(`video-panel--${source.accent}`);
+        panel.querySelector<HTMLElement>("[data-long-label]")!.textContent = source.label;
+        panel.querySelector<HTMLElement>("[data-description]")!.textContent =
+          source.description;
+
+        const outcome = panel.querySelector<HTMLElement>("[data-outcome]");
+        if (outcome) {
+          outcome.textContent = source.outcome ?? "";
+          outcome.toggleAttribute("hidden", !source.outcome);
+        }
+        const aggregate = panel.querySelector<HTMLElement>("[data-aggregate]");
+        if (aggregate) {
+          aggregate.textContent = source.aggregate ?? "";
+          aggregate.toggleAttribute("hidden", !source.aggregate);
+        }
+        const openLink = panel.querySelector<HTMLAnchorElement>("[data-open-video]");
+        if (openLink) openLink.href = source.src;
+        video.ariaLabel = `${source.label}: ${source.description}`;
+        video.poster = source.src.replace(/\.mp4$/i, ".webp");
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+            const plan = sourceSwitchPlan({
+              timeline,
+              playing,
+              duration: video.duration
+            });
+            video.currentTime = plan.seekTime;
+            if (plan.resume) void video.play().catch(() => undefined);
+            updateReadout();
+          },
+          { once: true }
+        );
+        video.src = source.src;
+        video.load();
+
+        const panelIndex = panel.dataset.panelIndex;
+        const mobileTab = group.querySelector<HTMLElement>(
+          `[data-mobile-tab][data-panel-index="${panelIndex}"]`
+        );
+        if (mobileTab) mobileTab.textContent = source.shortLabel;
+        updateDuplicateOptions();
+        setStatus(`${source.label} loaded without changing the shared timeline.`);
+      });
+    });
+
+    group.querySelectorAll<HTMLButtonElement>("[data-mobile-tab]").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const requestedIndex = tab.dataset.panelIndex;
+        group.querySelectorAll<HTMLButtonElement>("[data-mobile-tab]").forEach((candidate) => {
+          const selected = candidate === tab;
+          candidate.setAttribute("aria-selected", String(selected));
+          candidate.tabIndex = selected ? 0 : -1;
+        });
+        group.querySelectorAll<HTMLElement>("[data-video-panel]").forEach((panel) => {
+          panel.dataset.mobileActive = String(panel.dataset.panelIndex === requestedIndex);
+        });
+      });
+      tab.addEventListener("keydown", (event) => {
+        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = Array.from(
+          group.querySelectorAll<HTMLButtonElement>("[data-mobile-tab]")
+        );
+        const index = tabs.indexOf(tab);
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        tabs[(index + direction + tabs.length) % tabs.length]?.click();
+        tabs[(index + direction + tabs.length) % tabs.length]?.focus();
+      });
+    });
+
+    playButton.addEventListener("click", () => {
+      if (playing) stop("Videos paused.");
+      else start();
+    });
+
+    restartButton.addEventListener("click", reset);
+
+    speedSelect.addEventListener("change", () => {
+      const wasPlaying = playing;
+      if (wasPlaying) stop();
+      speed = Number(speedSelect.value) || 1;
+      setStatus(`Playback speed set to ${speed} times.`);
+      if (wasPlaying) start();
+    });
+
+    slider.addEventListener("input", () => {
+      const wasPlaying = playing;
+      if (wasPlaying) stop();
+      timeline = Number(slider.value);
+      seekVideos(true);
+      setStatus(`Videos moved to ${formatTime(timeline)}.`);
+    });
+
+    updateDuplicateOptions();
+    updateReadout();
+  });
+</script>
+
+<style>
+  .sync-comparison {
+    overflow: hidden;
+    border: 1px solid var(--rule-dark);
+    background: var(--paper-raised);
+    box-shadow: var(--shadow);
+  }
+
+  .sync-comparison__header {
+    padding: clamp(1rem, 2.5vw, 1.6rem);
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .sync-comparison__kicker {
+    margin: 0 0 0.25rem;
+    color: var(--rust);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .sync-comparison__header h3 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: clamp(1.5rem, 3vw, 2.35rem);
+    font-weight: 500;
+    line-height: 1.1;
+  }
+
+  .sync-comparison__header p {
+    max-width: 690px;
+    margin: 0.45rem 0 0;
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  .sync-comparison__controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.45rem;
+  }
+
+  .sync-comparison__controls button,
+  .sync-comparison__controls select,
+  .video-panel__heading select {
+    min-height: 2.35rem;
+    padding: 0.4rem 0.65rem;
+    border: 1px solid var(--rule-dark);
+    border-radius: 0;
+    background: var(--paper);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .sync-comparison__controls button {
+    cursor: pointer;
+  }
+
+  .sync-comparison__controls button:hover {
+    background: white;
+    border-color: var(--rust);
+  }
+
+  .sync-comparison__controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--ink-soft);
+    font-size: 0.68rem;
+  }
+
+  .sync-comparison__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sync-comparison__mobile-tabs {
+    display: none;
+  }
+
+  .sync-comparison__grid--all {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .video-panel {
+    min-width: 0;
+    border-right: 1px solid var(--rule);
+    background: #191816;
+  }
+
+  .video-panel:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .video-panel__heading {
+    min-height: 50px;
+    padding: 0.55rem 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-top: 4px solid var(--accent);
+    background: var(--paper-raised);
+  }
+
+  .video-panel__heading > strong {
+    font-family: var(--serif);
+    font-size: 0.9rem;
+  }
+
+  .video-panel__heading > span {
+    color: var(--ink-soft);
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    text-align: right;
+    text-transform: uppercase;
+  }
+
+  .video-panel__viewport {
+    position: relative;
+    aspect-ratio: 640 / 552;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #111;
+  }
+
+  .video-panel video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .video-panel__error {
+    position: absolute;
+    inset: auto 0.6rem 0.6rem;
+    margin: 0;
+    padding: 0.6rem;
+    background: rgb(25 24 22 / 90%);
+    color: white;
+    font-size: 0.68rem;
+  }
+
+  .video-panel__error a {
+    color: #ffd69c;
+  }
+
+  .video-panel__caption {
+    min-height: 128px;
+    padding: 0.8rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-raised);
+  }
+
+  .video-panel__caption strong,
+  .video-panel__caption small {
+    display: block;
+  }
+
+  .video-panel__caption strong {
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 1rem;
+  }
+
+  .video-panel__caption p {
+    margin: 0.3rem 0 0.45rem;
+    color: var(--ink-soft);
+    font-size: 0.69rem;
+    line-height: 1.45;
+  }
+
+  .video-panel__caption small {
+    font-family: var(--mono);
+    font-size: 0.59rem;
+  }
+
+  .video-panel--rust {
+    --accent: var(--rust);
+  }
+
+  .video-panel--blue {
+    --accent: var(--blue);
+  }
+
+  .video-panel--gray {
+    --accent: var(--gray);
+  }
+
+  .video-panel--gold {
+    --accent: var(--gold);
+  }
+
+  .video-panel--teal {
+    --accent: var(--teal);
+  }
+
+  .video-panel--violet {
+    --accent: var(--violet);
+  }
+
+  .sync-comparison__timeline {
+    padding: 0.9rem 1rem 1.1rem;
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+    gap: 0.8rem;
+    align-items: center;
+    background: var(--paper-raised);
+    color: var(--ink-soft);
+    font-family: var(--mono);
+    font-size: 0.64rem;
+  }
+
+  .sync-comparison__timeline input {
+    width: 100%;
+    accent-color: var(--rust);
+  }
+
+  .sync-comparison--compact .video-panel__caption {
+    min-height: 108px;
+  }
+
+  .sync-comparison--compact .video-panel__viewport {
+    aspect-ratio: 4 / 3;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 920px) {
+    .sync-comparison__header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .sync-comparison__controls {
+      justify-content: flex-start;
+    }
+
+    .sync-comparison__grid,
+    .sync-comparison__grid--all {
+      grid-template-columns: 1fr;
+    }
+
+    .video-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(200px, 0.7fr);
+      border-right: 0;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .video-panel__heading {
+      grid-column: 1 / -1;
+    }
+
+    .video-panel__caption {
+      min-height: 0;
+      border-bottom: 0;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .sync-comparison[data-selectable="true"] .sync-comparison__mobile-tabs {
+      padding: 0.65rem;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.4rem;
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper-raised);
+    }
+
+    .sync-comparison__mobile-tabs button {
+      min-width: 0;
+      padding: 0.55rem 0.35rem;
+      overflow: hidden;
+      border: 1px solid var(--rule-dark);
+      background: var(--paper);
+      font-size: 0.66rem;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sync-comparison__mobile-tabs button[aria-selected="true"] {
+      border-color: var(--rust);
+      background: var(--rust);
+      color: white;
+    }
+
+    .sync-comparison[data-selectable="true"] .video-panel {
+      display: none;
+    }
+
+    .sync-comparison[data-selectable="true"] .video-panel[data-mobile-active="true"] {
+      display: block;
+    }
+
+    .video-panel {
+      display: block;
+    }
+
+    .sync-comparison__timeline {
+      grid-template-columns: 1fr auto;
+    }
+
+    .sync-comparison__timeline label {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

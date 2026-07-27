@@ -1,0 +1,33 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout
+  title="Note not found · Research Notes"
+  description="The requested research note could not be found."
+>
+  <section class="not-found">
+    <p class="eyebrow">404</p>
+    <h1>That note is not here.</h1>
+    <p>The archive may have moved, or the link may be incomplete.</p>
+    <a href={base}>Return to the research notes</a>
+  </section>
+</BaseLayout>
+
+<style>
+  .not-found {
+    width: min(760px, calc(100% - 2rem));
+    min-height: 60vh;
+    margin: 0 auto;
+    padding: 8rem 0;
+  }
+
+  h1 {
+    margin: 0.2rem 0 1rem;
+    font-family: var(--serif);
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight: 500;
+    line-height: 1;
+  }
+</style>

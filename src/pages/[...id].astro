@@ -1,0 +1,50 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+export async function getStaticPaths() {
+  const notes = await getCollection("notes");
+  return notes.map((note) => ({
+    params: { id: note.id },
+    props: { note }
+  }));
+}
+
+interface Props {
+  note: CollectionEntry<"notes">;
+}
+
+const { note } = Astro.props;
+const { Content } = await render(note);
+const formattedDate = new Intl.DateTimeFormat("en", {
+  year: "numeric",
+  month: "long",
+  day: "numeric"
+}).format(note.data.publishedAt);
+---
+
+<BaseLayout
+  title={`${note.data.title} · Bryan’s Research Notes`}
+  description={note.data.summary}
+  article
+>
+  <article class="note-shell">
+    <header class="note-hero">
+      <p class="eyebrow">{note.data.eyebrow}</p>
+      <h1>{note.data.title}</h1>
+      <p class="note-hero__summary">{note.data.summary}</p>
+      <div class="note-hero__meta">
+        <time datetime={note.data.publishedAt.toISOString()}>{formattedDate}</time>
+        <span>By Bryan Dong</span>
+        <span>
+          {note.data.status === "preliminary"
+            ? "Preliminary research note"
+            : note.data.status.replaceAll("-", " ")}
+        </span>
+      </div>
+    </header>
+    <div class="note-prose">
+      <Content />
+    </div>
+  </article>
+</BaseLayout>

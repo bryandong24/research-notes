@@ -1,0 +1,372 @@
+{
+  "artifacts": [
+    {
+      "aggregate_success_percent": 86.0,
+      "bytes": 360002,
+      "category": "rollout",
+      "condition_id": "A",
+      "id": "a-giava-unet",
+      "label": "Task-specific GIAVA gaze",
+      "maximum_stage": 5,
+      "path": "rollouts/seed-2000/a-giava-unet.mp4",
+      "poster_bytes": 13444,
+      "poster_path": "rollouts/seed-2000/a-giava-unet.webp",
+      "poster_sha256": "4f1cee453556062c0641b84e66154382bddcc7b146922a45613a658f390ace47",
+      "rollout_success": true,
+      "sha256": "5043b60a275463ce5010d39fa4ace437f99c0b7edc0708b360637fcc1e7f4e13",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 63.3,
+      "bytes": 361428,
+      "category": "rollout",
+      "condition_id": "B",
+      "id": "b-center",
+      "label": "Constant center",
+      "maximum_stage": 3,
+      "path": "rollouts/seed-2000/b-center.mp4",
+      "poster_bytes": 12870,
+      "poster_path": "rollouts/seed-2000/b-center.webp",
+      "poster_sha256": "b0d6bdd5074a1cbc8e20dacdab1ab176f67c5e3b84b5faa73537d0b21e64c7f9",
+      "rollout_success": false,
+      "sha256": "10736429278695efe4a7fe41beb276fd565f7964dcbd5117181a06cfe7efb10f",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 71.3,
+      "bytes": 301332,
+      "category": "rollout",
+      "condition_id": "C",
+      "id": "c-task-prior",
+      "label": "Train160 gaze KDE mode",
+      "maximum_stage": 5,
+      "path": "rollouts/seed-2000/c-task-prior.mp4",
+      "poster_bytes": 13830,
+      "poster_path": "rollouts/seed-2000/c-task-prior.webp",
+      "poster_sha256": "11b7b2d40ebef3f9d5a9d83b69d672d34d4195766e81b6dcb6404c7318cdaa59",
+      "rollout_success": true,
+      "sha256": "14be7258d64e6c4415093a732e00c0032cc6151c73d0fc0f1489fed01fd05a9c",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 70.0,
+      "bytes": 343247,
+      "category": "rollout",
+      "condition_id": "D",
+      "id": "d-deepgaze-mit",
+      "label": "DeepGaze IIE with MIT prior",
+      "maximum_stage": 5,
+      "path": "rollouts/seed-2000/d-deepgaze-mit.mp4",
+      "poster_bytes": 13536,
+      "poster_path": "rollouts/seed-2000/d-deepgaze-mit.webp",
+      "poster_sha256": "7ccddcc4e6142d08751dd6d1fba2e769bd535a020206b7453406799138093d1f",
+      "rollout_success": true,
+      "sha256": "65b0331d0204ef0db1ae15a189ccc91467f83a483466f12957650d2ab70bbf23",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 53.3,
+      "bytes": 347579,
+      "category": "rollout",
+      "condition_id": "E",
+      "id": "e-deepgaze-uniform",
+      "label": "DeepGaze IIE with uniform prior",
+      "maximum_stage": 5,
+      "path": "rollouts/seed-2000/e-deepgaze-uniform.mp4",
+      "poster_bytes": 13448,
+      "poster_path": "rollouts/seed-2000/e-deepgaze-uniform.webp",
+      "poster_sha256": "5b20ffc078c126a84b58d492ac578bc5f4f7cbbd236431f95ed700446a312814",
+      "rollout_success": true,
+      "sha256": "1d31df20e2ad84c832915c64ad8521baca12cdb8b9a1ae57d2006b3a435e6bbf",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 64.7,
+      "bytes": 633237,
+      "category": "rollout",
+      "condition_id": "Full",
+      "id": "full",
+      "label": "Full-resolution control",
+      "maximum_stage": 5,
+      "path": "rollouts/seed-2000/full.mp4",
+      "poster_bytes": 28692,
+      "poster_path": "rollouts/seed-2000/full.webp",
+      "poster_sha256": "9f514c588786af9ee243ad277537c52f14cb2b80f7c8f24d760429c37f7fcf4d",
+      "rollout_success": true,
+      "sha256": "f2fac222e2fe498d01a3611658c75d5380ba356a0f8168501161501f567f5c9c",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "aggregate_success_percent": 53.3,
+      "bytes": 314567,
+      "category": "rollout",
+      "condition_id": "Low",
+      "id": "low",
+      "label": "Uniform low-resolution control",
+      "maximum_stage": 3,
+      "path": "rollouts/seed-2000/low.mp4",
+      "poster_bytes": 11104,
+      "poster_path": "rollouts/seed-2000/low.webp",
+      "poster_sha256": "4d34d4f48e398b02ec9f06a34dc351007f627a6eba70fca2162cf9fe27586366",
+      "rollout_success": false,
+      "sha256": "eb78946073e335f5d25a8785e728f5a885a603d6448030accc44a3e650e4ae57",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 552,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 490069,
+      "category": "same_observation",
+      "id": "recorded-human",
+      "label": "Recorded human gaze",
+      "path": "observations/qa20/recorded-human.mp4",
+      "poster_bytes": 11464,
+      "poster_path": "observations/qa20/recorded-human.webp",
+      "poster_sha256": "aaa78d08530b95f753b651a0063538df5b0431c4866fcca3ebd538d15646ce2d",
+      "sha256": "e3e090b53badf56dd90543d1824c8b04eb153c54e997d6335835d1c5742f08b4",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 489190,
+      "category": "same_observation",
+      "id": "giava-unet",
+      "label": "GIAVA task U-Net",
+      "path": "observations/qa20/giava-unet.mp4",
+      "poster_bytes": 11176,
+      "poster_path": "observations/qa20/giava-unet.webp",
+      "poster_sha256": "739f2e102933f715a415e7fc214dff72c914019131fd6a6923b2daca358355e2",
+      "sha256": "009593767583dd98b37fdde4700e78c65c52868ad1ef589706e5912eab911f4a",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 455737,
+      "category": "same_observation",
+      "id": "task-kde",
+      "label": "Human gaze KDE task prior",
+      "path": "observations/qa20/task-kde.mp4",
+      "poster_bytes": 11400,
+      "poster_path": "observations/qa20/task-kde.webp",
+      "poster_sha256": "ee5242bfcb24484e28257c527afd1e1a0ecd1fddd7f79afd6b5b7ae1cc3dacac",
+      "sha256": "6d888a155d7b31d48d3e233a9bb5ae2ff1de18759b439ed22048b34e61421f29",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 528539,
+      "category": "same_observation",
+      "id": "deepgaze-mit",
+      "label": "DeepGaze IIE with MIT prior",
+      "path": "observations/qa20/deepgaze-mit.mp4",
+      "poster_bytes": 12160,
+      "poster_path": "observations/qa20/deepgaze-mit.webp",
+      "poster_sha256": "2e7c6181c333eb0ff39bea9c0866f9dba95ab20a7cc4bad6776426de19427037",
+      "sha256": "3c9494cbfe71792def2ed52d24deb039bd65bb17151e38b91a5024a56a26bb3c",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 519377,
+      "category": "same_observation",
+      "id": "deepgaze-uniform",
+      "label": "DeepGaze IIE with uniform prior",
+      "path": "observations/qa20/deepgaze-uniform.mp4",
+      "poster_bytes": 11866,
+      "poster_path": "observations/qa20/deepgaze-uniform.webp",
+      "poster_sha256": "cda021f7004904df669aed8692e642ce7e67b452e41dde75527edbe8ff6ed782",
+      "sha256": "0be471635b1a6aff8d432fb187b2955712495210fe4e107e39b9fe7cb6509b75",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 423558,
+      "category": "same_observation",
+      "id": "center",
+      "label": "Geometric center",
+      "path": "observations/qa20/center.mp4",
+      "poster_bytes": 11658,
+      "poster_path": "observations/qa20/center.webp",
+      "poster_sha256": "f0d21c086bc8542bf3a7fcb779d88a25be54d67d56c64d707918732c858bea97",
+      "sha256": "4c215fc576f8041f677bce1e9ab14c32116691739bdbfdd9e9004362deca7625",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 10.0,
+        "faststart": true,
+        "fps": "25/1",
+        "frames": 250,
+        "height": 480,
+        "pixel_format": "yuv420p",
+        "width": 640
+      }
+    },
+    {
+      "bytes": 1068479,
+      "category": "comparison",
+      "columns": [
+        {
+          "aggregate_success_percent": 86.0,
+          "condition_id": "A",
+          "id": "a-giava-unet",
+          "label": "Task-specific GIAVA gaze",
+          "maximum_stage": 5,
+          "rollout_success": true
+        },
+        {
+          "aggregate_success_percent": 70.0,
+          "condition_id": "D",
+          "id": "d-deepgaze-mit",
+          "label": "DeepGaze IIE with MIT prior",
+          "maximum_stage": 5,
+          "rollout_success": true
+        },
+        {
+          "aggregate_success_percent": 53.3,
+          "condition_id": "Low",
+          "id": "low",
+          "label": "Uniform low-resolution control",
+          "maximum_stage": 3,
+          "rollout_success": false
+        }
+      ],
+      "id": "gordon-task-specific-deepgaze-low",
+      "path": "foveated-gaze/gordon-task-specific-deepgaze-low.mp4",
+      "poster_bytes": 53532,
+      "poster_path": "foveated-gaze/gordon-task-specific-deepgaze-low.webp",
+      "poster_sha256": "cd32e444323969c7c9ca8932ad4f4a05655d121ff30e32abd18d277252ccd0f7",
+      "sha256": "3c99c85281f1c3a157fcf8fc85ce751f02d458bbb2569deb41726ef223b96973",
+      "video": {
+        "codec": "h264",
+        "duration_seconds": 12.0,
+        "faststart": true,
+        "fps": "25/3",
+        "frames": 100,
+        "height": 624,
+        "pixel_format": "yuv420p",
+        "width": 1920
+      }
+    }
+  ],
+  "display_and_claim_caveats": [
+    "Rollout clear-square and blurred-periphery imagery is an after-action display proxy. Policy actions used GIAVA's actual mixed-resolution tokenizer, not the displayed raster.",
+    "Same-observation videos use a recorded human demonstration and execute no action policy.",
+    "Rollouts share an initial environment seed but diverge after their independently trained policies act; they are not framewise-paired trajectories.",
+    "This is post-acquisition foveation. It does not demonstrate sensor-readout bandwidth savings.",
+    "DeepGaze is a generic natural-image free-viewing model used as an uncalibrated pseudo-human baseline."
+  ],
+  "export_id": "giava-foveated-gaze-gordon-v1",
+  "generated_at_utc": "2026-07-27T20:08:28Z",
+  "rollout_protocol": {
+    "environment_seed": 2000,
+    "frame_padding": "Clips shorter than 12 seconds hold their final frame. Playback speed is unchanged.",
+    "policy_seed": 42,
+    "selection": "First predeclared representative rollout slot; not selected after observing outcomes."
+  },
+  "same_observation_protocol": {
+    "episode_index": 5,
+    "selection": "The same 250 recorded demonstration frames are used for every source; no action policy is executed."
+  },
+  "schema_version": 1,
+  "task": "GIAVA / AV-ALOHA thread needle"
+}
