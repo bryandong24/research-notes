@@ -31,10 +31,9 @@ const { items, caption } = Astro.props;
 
 <style>
   .stat-strip {
-    padding: clamp(1.2rem, 2.5vw, 2rem);
-    border: 1px solid var(--rule-dark);
-    background: var(--paper-raised);
-    box-shadow: var(--shadow);
+    padding: 1.1rem 0 0.8rem;
+    border-top: 1px solid var(--rule-dark);
+    border-bottom: 1px solid var(--rule-dark);
   }
 
   .stat-strip__grid {
@@ -45,12 +44,13 @@ const { items, caption } = Astro.props;
 
   .stat {
     min-width: 0;
-    padding: 0.5rem clamp(1rem, 2.5vw, 2rem);
-    border-left: 3px solid var(--accent);
+    padding: 0.15rem clamp(1rem, 2.2vw, 1.6rem);
+    border-left: 1px solid var(--rule);
   }
 
   .stat:first-child {
-    padding-left: 1rem;
+    padding-left: 0;
+    border-left: 0;
   }
 
   .stat strong,
@@ -60,23 +60,24 @@ const { items, caption } = Astro.props;
   }
 
   .stat strong {
-    color: var(--accent);
+    color: var(--ink);
     font-family: var(--serif);
-    font-size: clamp(2.6rem, 5vw, 4.6rem);
+    font-size: clamp(2rem, 3.5vw, 2.7rem);
     font-weight: 500;
-    letter-spacing: -0.05em;
+    letter-spacing: -0.035em;
     line-height: 1;
   }
 
   .stat span {
-    margin-top: 0.55rem;
-    font-weight: 750;
+    margin-top: 0.45rem;
+    font-size: 0.84rem;
+    font-weight: 680;
   }
 
   .stat small {
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
     color: var(--ink-soft);
-    font-size: 0.72rem;
+    font-size: 0.69rem;
     line-height: 1.45;
   }
 
@@ -101,21 +102,26 @@ const { items, caption } = Astro.props;
   }
 
   figcaption {
-    margin-top: 1.25rem;
-    padding-top: 0.8rem;
-    border-top: 1px solid var(--rule);
+    margin-top: 1rem;
+    padding-top: 0.65rem;
     color: var(--ink-soft);
-    font-size: 0.72rem;
+    font-size: 0.69rem;
   }
 
   @media (max-width: 700px) {
     .stat-strip__grid {
       grid-template-columns: 1fr;
-      gap: 1.2rem;
     }
 
     .stat {
-      padding: 0.25rem 0 0.25rem 1rem;
+      padding: 0.85rem 0;
+      border-top: 1px solid var(--rule);
+      border-left: 0;
+    }
+
+    .stat:first-child {
+      padding-top: 0;
+      border-top: 0;
     }
   }
 </style>

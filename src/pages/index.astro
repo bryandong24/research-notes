@@ -21,20 +21,18 @@ const formatDate = (date: Date) =>
   <div class="home-shell">
     <section class="home-hero">
       <div>
-        <p class="eyebrow">Foveated perception · Robot learning</p>
-        <h1>Research notes on where robots should look.</h1>
+        <p class="eyebrow">Foveated perception and robot learning</p>
+        <h1>Notes on where robots should look</h1>
         <p class="home-hero__lede">
           Experiments toward models that spend high-resolution computation only where it
           changes the action.
         </p>
-      </div>
-      <aside class="home-hero__aside">
-        <strong>Current question</strong>
-        <p>
+        <p class="home-hero__question">
+          <strong>Current question:</strong>{" "}
           Can action-conditioned relevance from a generalist VLA or world-action model
           supervise a small, causal gaze policy?
         </p>
-      </aside>
+      </div>
     </section>
 
     <section class="archive" id="notes" aria-labelledby="notes-title">
@@ -56,7 +54,6 @@ const formatDate = (date: Date) =>
                 </h3>
                 <p>{note.data.summary}</p>
               </div>
-              <span class="note-card__arrow" aria-hidden="true">↗</span>
             </li>
           ))
         }
