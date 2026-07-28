@@ -3,8 +3,29 @@ import { getCollection } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
 
 const notes = (await getCollection("notes")).sort(
-  (a, b) => b.data.publishedAt.valueOf() - a.data.publishedAt.valueOf()
+  (a, b) => a.data.seriesOrder - b.data.seriesOrder
 );
+const featuredNote = notes.find((note) => note.data.featured);
+const walkthrough = notes.filter((note) => !note.data.featured);
+const walkthroughGroups = [
+  {
+    title: "Orientation",
+    description: "The model architectures and vocabulary behind the experiments.",
+    notes: walkthrough.filter((note) => note.data.seriesOrder === 1)
+  },
+  {
+    title: "Evidence",
+    description: "Placement, gaze-source, matched-policy, and mechanism studies.",
+    notes: walkthrough.filter(
+      (note) => note.data.seriesOrder >= 2 && note.data.seriesOrder <= 5
+    )
+  },
+  {
+    title: "Next experiment",
+    description: "A concrete path from privileged relevance to a causal selector.",
+    notes: walkthrough.filter((note) => note.data.seriesOrder === 6)
+  }
+];
 const base = import.meta.env.BASE_URL;
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat("en", {
@@ -35,29 +56,76 @@ const formatDate = (date: Date) =>
       </div>
     </section>
 
+    {
+      featuredNote && (
+        <section class="featured-note" aria-labelledby="featured-note-title">
+          <div class="section-heading">
+            <h2 id="featured-note-title">Start with the visual abstract</h2>
+            <span>{featuredNote.data.readingMinutes} min</span>
+          </div>
+          <article>
+            <div class="featured-note__meta">
+              <time datetime={featuredNote.data.publishedAt.toISOString()}>
+                {formatDate(featuredNote.data.publishedAt)}
+              </time>
+              <span>{featuredNote.data.eyebrow}</span>
+            </div>
+            <h3>
+              <a href={`${base}${featuredNote.id}/`}>{featuredNote.data.title}</a>
+            </h3>
+            <p>{featuredNote.data.summary}</p>
+            <a class="featured-note__link" href={`${base}${featuredNote.id}/`}>
+              Results, videos, and interpretation <span aria-hidden="true">→</span>
+            </a>
+          </article>
+        </section>
+      )
+    }
+
     <section class="archive" id="notes" aria-labelledby="notes-title">
       <div class="section-heading">
-        <h2 id="notes-title">Research notes</h2>
-        <span>{String(notes.length).padStart(2, "0")} entries</span>
+        <h2 id="notes-title">Technical walkthrough</h2>
+        <span>{String(walkthrough.length).padStart(2, "0")} parts</span>
       </div>
-      <ol class="note-list">
-        {
-          notes.map((note) => (
-            <li class="note-card">
-              <time datetime={note.data.publishedAt.toISOString()}>
-                {formatDate(note.data.publishedAt)}
-              </time>
-              <div>
-                <p class="eyebrow">{note.data.eyebrow}</p>
-                <h3>
-                  <a href={`${base}${note.id}/`}>{note.data.title}</a>
-                </h3>
-                <p>{note.data.summary}</p>
-              </div>
-            </li>
-          ))
-        }
-      </ol>
+      <p class="archive__intro">
+        Read linearly, or enter through the section closest to the question you care about.
+        Completed experiments are separated from technical background and proposed work.
+      </p>
+      {
+        walkthroughGroups.map((group) => (
+          <section class="walkthrough-group" aria-labelledby={`group-${group.title.toLowerCase().replaceAll(" ", "-")}`}>
+            <header class="walkthrough-group__heading">
+              <p
+                class="walkthrough-group__label"
+                id={`group-${group.title.toLowerCase().replaceAll(" ", "-")}`}
+              >
+                {group.title}
+              </p>
+              <p>{group.description}</p>
+            </header>
+            <ol class="note-list">
+              {
+                group.notes.map((note) => (
+                  <li class="note-card">
+                    <span class="note-card__index">
+                      {String(note.data.seriesOrder).padStart(2, "0")}
+                    </span>
+                    <div>
+                      <p class="eyebrow">
+                        {note.data.eyebrow} · {note.data.readingMinutes} min
+                      </p>
+                      <h3>
+                        <a href={`${base}${note.id}/`}>{note.data.title}</a>
+                      </h3>
+                      <p>{note.data.summary}</p>
+                    </div>
+                  </li>
+                ))
+              }
+            </ol>
+          </section>
+        ))
+      }
     </section>
   </div>
 </BaseLayout>

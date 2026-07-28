@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -151,4 +151,25 @@ test("manifest checks every public artifact path, byte count, and checksum", asy
     assert.ok(tampered.issues.some((issue) => issue.includes("byte count")));
     assert.ok(tampered.issues.some((issue) => issue.includes("SHA-256 mismatch")));
   });
+});
+
+test("research-series metadata forms one contiguous walkthrough", async () => {
+  const notesRoot = path.resolve("src/content/notes/2026");
+  const files = (await readdir(notesRoot)).filter((file) => file.endsWith(".mdx"));
+  const metadata = await Promise.all(
+    files.map(async (file) => {
+      const source = await readFile(path.join(notesRoot, file), "utf8");
+      const order = Number(source.match(/^seriesOrder:\s*(\d+)$/m)?.[1]);
+      const featured = source.match(/^featured:\s*(true|false)$/m)?.[1] === "true";
+      return { file, order, featured };
+    })
+  );
+
+  assert.equal(metadata.length, 7);
+  assert.deepEqual(
+    metadata.map(({ order }) => order).sort((a, b) => a - b),
+    [0, 1, 2, 3, 4, 5, 6]
+  );
+  assert.equal(metadata.filter(({ featured }) => featured).length, 1);
+  assert.equal(metadata.find(({ featured }) => featured)?.order, 0);
 });

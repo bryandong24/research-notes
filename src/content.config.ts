@@ -10,7 +10,10 @@ const notes = defineCollection({
     publishedAt: z.coerce.date(),
     eyebrow: z.string(),
     status: z.enum(["preliminary", "work-in-progress", "proposal"]),
-    featured: z.boolean().default(false)
+    featured: z.boolean().default(false),
+    kind: z.enum(["abstract", "concept", "experiment", "analysis", "roadmap"]),
+    seriesOrder: z.number().int().min(0),
+    readingMinutes: z.number().int().positive()
   })
 });
 

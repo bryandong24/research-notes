@@ -1,0 +1,290 @@
+---
+title: "Why task-specific gaze works here"
+summary: "Exact-token geometry and temporal analysis suggest that the task-specific predictor wins by stably tracking needle-and-hole geometry, while a numeric gaze side channel remains a causal confound."
+publishedAt: 2026-07-28
+eyebrow: "Mechanism analysis · GIAVA"
+status: preliminary
+featured: false
+kind: analysis
+seriesOrder: 5
+readingMinutes: 11
+---
+
+The matched-source control study tells us *which complete system worked best*. It does not, by
+itself, tell us why.
+
+Our leading explanation is stable task tracking:
+
+> The task-specific GIAVA predictor follows the needle and target region smoothly enough to
+> keep small external geometry in the tokenizer's fine bands. Generic saliency often shifts
+> toward visually conspicuous robot hardware.
+
+This note tests that explanation on a common-observation panel. Every source sees the same 5,000
+recorded frames from 20 thread-needle demonstrations. The simulator state and moving camera are
+reconstructed frame by frame, task landmarks are projected into the image, and each projected
+point is assigned to the exact multiresolution band it would receive.
+
+The analysis explains the control result, but it is not a causal mediation study. GIAVA also
+appends gaze numerically to proprioception, and the task-specific predictor likely trained on
+some of the public demonstration frames used here.
+
+## Exact GIAVA token geometry
+
+The foveated tokenizer resizes an image to $288\times288$ and extracts approximately 20
+$16\times16$ tokens around gaze $g$:
+
+| Band | Token count | Source stride | Spatial support |
+|---|---:|---:|---:|
+| Fine core | 4 | 1 | central $32\times32$ |
+| Medium ring | 8 | 2 | surrounding region out to $96\times96$ |
+| Coarse ring | 8 | 6 | surrounding region out to $288\times288$ |
+
+A point in the stride-1 band is represented at full resized-image density. A stride-2 token
+summarizes a source region twice as wide and tall; a stride-6 token summarizes one six times as
+wide and tall.
+
+For a projected landmark $p$ and gaze center $g$, define its relative input sampling density as
+
+$$
+\rho(p,g)=
+\begin{cases}
+1, & p\in \mathcal B_1(g),\\
+\frac{1}{4}, & p\in \mathcal B_2(g),\\
+\frac{1}{36}, & p\in \mathcal B_6(g),\\
+0, & p\notin \mathcal B_1(g)\cup\mathcal B_2(g)\cup\mathcal B_6(g).
+\end{cases}
+$$
+
+Here $\mathcal B_s(g)$ is the ring assigned source stride $s$. The $1/s^2$ weight measures
+relative input sampling density, not learned importance and not control value.
+
+This exact-band analysis is stricter than asking whether a landmark lies inside the large clear
+square drawn in a video. That square is only an explanatory display.
+
+## Which geometry should be external?
+
+The policy already receives robot joint state. The small external quantities it must infer
+visually are therefore especially interesting.
+
+We define a phase-critical external landmark from the task's discrete progress:
+
+- needle center during acquisition;
+- needle tip during transport;
+- needle tip and target-hole proxy during insertion;
+- needle tip during threading and handoff.
+
+These are intentionally narrow diagnostic targets. They do not exhaust useful visual
+information: grasp boundaries, collision geometry, the other hand, or future targets may also
+matter.
+
+For every frame, the recorded robot and object state is restored in the simulator. If $P$ is a
+world-space landmark, $C$ the camera position, and $R$ its camera-to-world rotation, then
+
+$$
+P_{\mathrm{cam}}=R^\mathsf{T}(P-C).
+$$
+
+With positive depth $d=-P_{\mathrm{cam},z}$ and focal length $f$,
+
+$$
+x=W/2+fP_{\mathrm{cam},x}/d,\qquad
+y=H/2-fP_{\mathrm{cam},y}/d.
+$$
+
+This matters because GIAVA uses an active camera: even a fixed target moves in image
+coordinates as the camera arm moves.
+
+## Fine-token allocation
+
+The task-specific predictor nearly matches recorded human gaze in how it allocates resolution
+to the phase-critical external landmark.
+
+| Source | Landmark in stride 1 | In stride 1 or 2 | Relative density | Mean distance in 288-space |
+|---|---:|---:|---:|---:|
+| Recorded human | 56.5% [52.4, 60.6] | 99.4% [99.0, 99.7] | 0.672 [0.642, 0.703] | 15.74 px |
+| GIAVA predicted | **54.6%** [50.1, 59.2] | **99.8%** [99.6, 99.9] | **0.659** [0.625, 0.693] | **15.52 px** |
+| Geometric center | 0.0% | 24.0% [15.0, 33.6] | 0.081 [0.061, 0.102] | 61.86 px |
+| Training-gaze KDE | 29.7% [26.2, 33.4] | 91.1% [88.7, 93.2] | 0.453 [0.424, 0.482] | 28.90 px |
+| DeepGaze-MIT | 26.2% [20.4, 32.6] | 83.1% [79.8, 86.3] | 0.409 [0.362, 0.461] | 36.90 px |
+| DeepGaze-uniform | 29.2% [23.1, 35.5] | 62.5% [54.8, 69.9] | 0.385 [0.326, 0.444] | 42.79 px |
+
+On paired episodes, GIAVA predicted gaze exceeds DeepGaze-MIT by 28.4 percentage points of
+stride-1 coverage and 0.250 relative sampling density. It exceeds the stationary KDE by 24.9
+points and 0.206 density.
+
+The stationary source remains informative because this camera and task have a strong spatial
+prior: later activity converges near the target hole. Its weakness appears earlier.
+
+| Source | Acquire | Transport | Insertion | Threaded | Handoff |
+|---|---:|---:|---:|---:|---:|
+| Recorded human | 97.9% | 99.8% | 100.0% | 100.0% | 99.7% |
+| GIAVA predicted | **99.0%** | **100.0%** | **100.0%** | **100.0%** | **100.0%** |
+| Center | 0.0% | 19.6% | 32.9% | 29.0% | 43.7% |
+| Training-gaze KDE | 61.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| DeepGaze-MIT | 56.3% | 95.2% | 98.0% | 96.0% | 76.5% |
+| DeepGaze-uniform | 67.2% | 70.9% | 94.1% | 65.5% | 33.3% |
+
+Each value is the fraction of phase-critical external landmarks assigned to stride 1 or 2. The
+KDE already points toward the eventual goal and therefore performs well after acquisition.
+GIAVA predicted gaze adapts to the randomized initial needle location and closes the early-phase
+gap without sacrificing later precision.
+
+## Stability at the decision cadence
+
+Correct average placement is not sufficient if the fovea jumps between structures. We sample
+every sixth native frame, approximately the cadence at which the policy refreshes its action
+chunk and gaze point.
+
+For source $s$, define the gaze displacement
+
+$$
+\Delta_t^{(s)}
+=
+\left\|
+p\!\left(g_t^{(s)}\right)
+-p\!\left(g_{t-6}^{(s)}\right)
+\right\|_2.
+$$
+
+| Source | Mean displacement | Displacements over 62 raw pixels |
+|---|---:|---:|
+| Recorded human | 11.99 px | 3.7% |
+| GIAVA predicted | **9.45 px** | **2.8%** |
+| Center | 0.00 px | 0.0% |
+| Training-gaze KDE | 0.00 px | 0.0% |
+| DeepGaze-MIT | 38.37 px | 20.6% |
+| DeepGaze-uniform | 59.07 px | 32.7% |
+
+The useful behavior is not movement by itself. The fixed sources are perfectly stable but
+cannot retarget. DeepGaze retargets aggressively but often changes which salient structure
+receives the fovea. The GIAVA predictor combines low displacement with image-conditioned
+tracking.
+
+The current gaze also continues to cover the external geometry over a short future horizon:
+
+| Source | Current stride 1/2 | +0.24 s | +0.48 s |
+|---|---:|---:|---:|
+| GIAVA predicted | 99.8% | 100.0% | 100.0% |
+| Training-gaze KDE | 91.1% | 93.4% | 95.5% |
+| DeepGaze-MIT | 83.1% | 85.5% | 86.7% |
+| DeepGaze-uniform | 62.5% | 64.0% | 66.1% |
+
+This is compatible with the latency horizon of future acquisition-time foveation, but it is not
+evidence of anticipation. The needle and target move slowly, and trajectories converge toward a
+fixed goal.
+
+## What DeepGaze watches
+
+For each source point, we ask which projected landmark is nearest: external needle/target
+geometry, the right gripper-control site, or the left gripper-control site.
+
+| Source | External needle/target | Right gripper | Left gripper |
+|---|---:|---:|---:|
+| Recorded human | 99.9% | 0.1% | 0.1% |
+| GIAVA predicted | **100.0%** | 0.0% | 0.0% |
+| Training-gaze KDE | 97.3% | 0.0% | 2.7% |
+| DeepGaze-MIT | 50.2% | **41.2%** | 8.6% |
+| DeepGaze-uniform | 55.7% | 13.8% | **30.5%** |
+
+This matches the qualitative videos. Robot hands are large, moving, and conspicuous, which
+makes them plausible generic-saliency targets. But their configuration is already partially
+specified by the policy's proprioceptive input. Needle and hole state must be inferred visually,
+so another increment of spatial resolution may have higher marginal value there.
+
+That explanation remains a hypothesis. The “gripper” points are control-site origins rather
+than fingertip segmentations, nearest-point classification is not a causal intervention, and
+the policy might still use high-frequency hand appearance.
+
+## The numeric gaze side channel
+
+The gaze point does two jobs:
+
+1. it centers the multiresolution tokenizer;
+2. its two coordinates are appended to proprioception.
+
+The second path can expose compact task state even if the image tokens were unchanged. To
+measure how much phase information is present in the point alone, we fit a
+leave-one-episode-out nearest-centroid phase diagnostic using only $(g_x,g_y)$.
+
+| Source | Balanced phase accuracy from gaze alone |
+|---|---:|
+| Chance or either constant source | 20.0% |
+| DeepGaze-uniform | 36.1% |
+| DeepGaze-MIT | 41.4% |
+| Recorded human | 56.0% |
+| GIAVA predicted | **56.9%** |
+
+This does not show that the action DiT explicitly implements a phase classifier. It shows that
+the task-specific point carries more phase information than generic saliency and that the
+complete policy has access to it.
+
+Accordingly, the current mechanism claim is:
+
+> The task-specific gaze-conditioned pipeline combines fine allocation to external geometry,
+> stable retargeting, and a compact image-derived state coordinate.
+
+The stronger claim—fine token placement alone causes the control advantage—remains unproven.
+
+## The decisive 2×2 experiment
+
+The task-specific dynamic source and stationary KDE already provide the diagonal cells of a
+factorial design:
+
+| Tokenizer center | Numeric gaze conditioning | Status |
+|---|---|---|
+| Dynamic task-specific point | Dynamic task-specific coordinates | existing |
+| Dynamic task-specific point | Constant KDE coordinates | new |
+| Constant KDE point | Dynamic task-specific coordinates | new |
+| Constant KDE point | Constant KDE coordinates | existing |
+
+Training the two missing off-diagonal conditions with the same policy protocol will estimate:
+
+- the effect of dynamic visual allocation while numeric gaze is held constant;
+- the effect of dynamic numeric conditioning while token placement is held constant;
+- the interaction between the two pathways.
+
+This is the smallest experiment that can turn the current mechanism explanation into a causal
+decomposition.
+
+An architecture-controlled label comparison should follow. The present GIAVA-versus-DeepGaze
+result changes predictor architecture, preprocessing, readout, supervision, and temporal
+behavior. Training identical small U-Nets on human-gaze targets versus cached DeepGaze targets
+would isolate label source more cleanly and remove ambiguity about the released gaze model's
+training split.
+
+## Broader implication
+
+The mechanism is more specific than “look at the object” and more general than “copy human
+gaze.” A useful foveation policy must allocate extra resolution to information that changes the
+next action, remain coherent over time, and adapt as the object-target relationship evolves.
+
+That suggests a route beyond task-specific eye tracking:
+
+1. extract action-conditioned relevance from a capable full-resolution VLA or world-action
+   model;
+2. verify that relevance through matched-budget resolution restoration or deletion;
+3. distill it into a small causal selector that sees only low-resolution context at runtime;
+4. train the lightweight downstream policy on the selector's actual output distribution.
+
+Human gaze remains the strongest baseline here. It is a teacher to understand and potentially
+surpass, not the definition of robot-optimal sensing.
+
+## Limitations
+
+- The mechanism panel contains demonstration states, not the trained policies' own divergent
+  rollout states.
+- The released task-specific predictor likely trained on some or all of the public
+  demonstrations used in the analysis.
+- Landmark centers ignore occlusion and do not represent full object extent.
+- Phase assignments come from a small reward-derived ontology rather than independent human
+  annotation.
+- The nearest-landmark and phase-decoding analyses are descriptive rather than causal.
+- The current task has one instruction, one camera geometry, and strong spatial regularities.
+- All selectors currently see the full-resolution image before choosing gaze, so this remains
+  post-acquisition foveation.
+
+## References
+
+- Chuang et al., [GIAVA / Look, Focus, Act](https://arxiv.org/abs/2507.15833)
+- Finn et al., [Deep Spatial Autoencoders for Visuomotor Learning](https://arxiv.org/abs/1509.06113)
+- Linardos et al., [DeepGaze IIE](https://arxiv.org/abs/2105.12441)

@@ -1,0 +1,399 @@
+---
+title: "Does fovea placement matter?"
+summary: "A fixed nominal-resolution-budget, frozen-UVA PushT mechanism assay tests whether closed-loop control changes when the same high-resolution pixels are allocated to different parts of the scene."
+publishedAt: 2026-07-28
+eyebrow: "Mechanism study · PushT"
+status: preliminary
+featured: false
+kind: experiment
+seriesOrder: 2
+readingMinutes: 12
+---
+
+Before learning a gaze policy, we need to establish a more basic fact: **does the location of
+preserved visual detail affect control at all?**
+
+We tested this with a released [Unified Video and Action
+Model](https://arxiv.org/abs/2503.00200) (UVA) policy on PushT. The policy was frozen. We changed
+only its image observation, held the nominal source-resolution allocation fixed, and moved a
+high-resolution region toward or away from the object being pushed.
+
+The result is a strong placement dose-response. With the high-resolution region centered on the
+T-block, the policy completed 62% of 50 rollouts. Moving the same region by half a foveal radius
+reduced success to 40%; at one radius it fell to 8%. But this is not a claim that foveation
+outperforms full-resolution vision, and it is not yet a speed result. It is a controlled
+mechanism assay showing that **which pixels retain detail can materially alter a frozen
+policy's behavior**.
+
+## The intervention
+
+PushT provides an RGB observation $I\in\mathbb{R}^{3\times96\times96}$. We first build a coarse
+global image by downsampling to $12\times12$ and restoring the original raster dimensions:
+
+$$
+P = U_{96}\left(D_{12}(I)\right).
+$$
+
+Given a binary high-resolution mask $M$, the policy receives
+
+$$
+I_{\mathrm{fov}}
+=
+M\odot I+(1-M)\odot P.
+$$
+
+Pixels inside $M$ retain their source values. Pixels outside it come from the upsampled global
+image. The resulting observation is still an ordinary dense $96\times96$ RGB tensor, so the
+policy's architecture and compute are unchanged.
+
+This distinction matters. The experiment tests **spatial information allocation and
+frozen-model compatibility**. It does not use a variable-length token sequence, reduce UVA's
+FLOPs, or require a new projection or decoder.
+
+### Matching the nominal source-resolution budget
+
+The foveated condition combines a $12\times12$ global read with exactly 432 high-resolution
+source pixels:
+
+$$
+B_{\mathrm{fov}}
+=12^2+432
+=576.
+$$
+
+The uniform comparison downsamples the entire image to $24\times24$:
+
+$$
+B_{\mathrm{uniform}}
+=24^2
+=576.
+$$
+
+This bookkeeping assigns both conditions a nominal budget of 576 source-resolution values, or
+6.25% of the 9,216-pixel raster. The foveated mask always contains exactly 432 restored source
+pixels, including near image boundaries.
+
+This is a **nominal resolution/information budget**, not a trace of an acquisition process. The
+$12\times12$ and $24\times24$ images are formed by area interpolation from the complete
+$96\times96$ simulator frame, so each coarse value averages an image region rather than reading
+one independently chosen source pixel. The dense tensor ultimately contains 9,216 displayed
+pixels in either case, and UVA processes all of them. Accordingly, “6.25%” does not establish a
+camera-bandwidth, codec-bit-rate, entropy, or FLOP reduction.
+
+## The oracle selector
+
+PushT renders the manipulated T-block with a known color. A privileged selector identifies the
+block in the current simulator frame and places the fovea at its centroid. The selector can see
+the full source frame, but the frozen policy receives only $I_{\mathrm{fov}}$.
+
+This is deliberately an upper-bound intervention, not a deployable gaze policy. It lets us vary
+placement quality without simultaneously changing selector training.
+
+We measure realized placement with object recall:
+
+$$
+q
+=
+\frac{|M\cap T|}{|T|},
+$$
+
+where $T$ is the set of pixels belonging to the current T-block. To construct a dose-response,
+we displace the oracle center by
+
+$$
+\frac{d}{r}\in\{0,\;0.5,\;1,\;1.5,\;2\},
+$$
+
+where $r$ is the effective foveal radius. Displacement directions are balanced across the four
+cardinal directions.
+
+## What “reward” and “success” mean
+
+PushT evaluates geometric overlap between the block and the goal. At timestep $t$, coverage is
+
+$$
+c_t
+=
+\frac{\operatorname{area}(T_t\cap G)}
+       {\operatorname{area}(G)}.
+$$
+
+The environment maps this to
+
+$$
+r_t
+=
+\operatorname{clip}\left(\frac{c_t}{0.95},0,1\right).
+$$
+
+The continuous score reported below is the maximum reward reached during the episode:
+
+$$
+R=\max_t r_t.
+$$
+
+An episode counts as an exact success when $R=1$, corresponding to the environment's 95%
+coverage threshold. Here “exact success” means crossing that discrete simulator completion
+criterion; it does not mean literal 100% geometric overlap. The underlying score is a
+simulator-defined geometric reward—not a learned reward model or a human rating.
+
+These two metrics expose different failure modes. A policy can move the block close to the goal
+and receive a high maximum reward without ever crossing the exact-completion threshold.
+
+## Experiment sequence
+
+The study proceeded in three stages.
+
+### 1. Restoration and deletion gate
+
+A small paired screen first tested whether the frozen policy responded to spatially localized
+information at all. It compared full resolution, uniform downsampling, object-centered
+restoration, restoration displaced by two radii, deleting the object region from a
+full-resolution frame, and deleting an equal-area background region.
+
+In that exploratory screen:
+
+- object-centered restoration exceeded the two-radius condition by 0.315 mean reward;
+- deleting the task region hurt 0.118 more than deleting background;
+- full resolution exceeded uniform sampling by only 0.016.
+
+These numbers served only as a gate to the larger paired study.
+
+We also ran one predeclared tighter-budget stress test:
+
+$$
+8^2+192=256=16^2,
+$$
+
+or a nominal 2.78% source-resolution budget. At this smaller allocation, object-centered foveation
+was 0.168 reward below uniform sampling, although it remained 0.318 above a two-radius fovea.
+Concentrating an extremely small budget into one region can therefore discard too much global
+information.
+
+### 2. Placement curve
+
+The main placement assay evaluated 50 paired rollouts per condition, each with a 300-step
+horizon. It included full and uniformly coarse references, peripheral-only input, geometric
+center, a fixed random location, and five controlled object-relative offsets.
+
+| Visual condition | Mean episode-max reward | Exact success | Object recall |
+|---|---:|---:|---:|
+| Full resolution | 0.972 | 68% | — |
+| Uniform $24\times24$ | 0.903 | 20% | — |
+| Object-centered, 0 radii | 0.894 | 62% | 0.738 |
+| Displaced 0.5 radii | 0.847 | 40% | 0.640 |
+| Displaced 1 radius | 0.679 | 8% | 0.402 |
+| Displaced 1.5 radii | 0.594 | 4% | 0.199 |
+| Displaced 2 radii | 0.580 | 6% | 0.079 |
+| Center fovea | 0.772 | 26% | 0.376 |
+| Fixed random fovea | 0.668 | 8% | 0.061 |
+| $12\times12$ periphery only | 0.719 | 4% | — |
+
+The paired episode-level slope was
+
+$$
+\frac{\Delta R}{\Delta(d/r)}
+=-0.176,
+\qquad
+95\%\ \mathrm{CI}=[-0.227,-0.125],
+$$
+
+while the success-probability slope was
+
+$$
+\frac{\Delta P(\mathrm{success})}{\Delta(d/r)}
+=-0.296,
+\qquad
+95\%\ \mathrm{CI}=[-0.360,-0.228].
+$$
+
+The overall decline is clear. The data do not establish a high-quality placement plateau: the
+apparent flattening between 1.5 and 2 radii is a poor-performance floor.
+
+<details>
+  <summary>Paired comparisons and adjacent placement effects</summary>
+
+  All intervals below are paired episode-bootstrap 95% confidence intervals.
+
+  | Comparison | Reward difference | Success difference |
+  |---|---:|---:|
+  | Full − uniform | $+0.069\;[0.024,0.127]$ | $+0.48\;[0.30,0.64]$ |
+  | Object-centered − uniform | $-0.009\;[-0.068,0.042]$ | $+0.42\;[0.26,0.58]$ |
+  | Object-centered − center | $+0.123\;[0.022,0.212]$ | $+0.36\;[0.20,0.52]$ |
+  | Object-centered − random | $+0.226\;[0.132,0.324]$ | $+0.54\;[0.38,0.68]$ |
+
+  The adjacent reward differences were:
+
+  | Better minus worse placement | Reward difference |
+  |---|---:|
+  | 0 − 0.5 radii | $+0.047\;[-0.036,0.135]$ |
+  | 0.5 − 1 radius | $+0.168\;[0.052,0.278]$ |
+  | 1 − 1.5 radii | $+0.085\;[0.005,0.166]$ |
+  | 1.5 − 2 radii | $+0.015\;[-0.085,0.112]$ |
+</details>
+
+### 3. Fixed nominal-budget region allocation
+
+The placement curve shows that object coverage matters, but it does not tell us whether the
+object should receive the entire budget. The next ablation keeps the same 432 high-resolution
+pixels and compares:
+
+- 432 pixels around the current object;
+- 432 pixels around the fixed goal;
+- 216 object pixels plus 216 goal pixels;
+- 216 object pixels plus 216 matched-decoy pixels.
+
+The decoy lies at the same object-relative distance as the goal but is rotated by
+$\pm90^\circ$. It controls for the generic effect of introducing a second spatial lobe or mask
+boundary. If the two regions overlap, the renderer refills their quotas with the nearest unused
+pixels, keeping the union at exactly 432.
+
+PushT uses a fixed goal at image center, so the earlier center condition and goal-only condition
+are the same realized intervention.
+
+| Allocation | Mean episode-max reward | Exact success | Object recall | Visible-goal recall |
+|---|---:|---:|---:|---:|
+| Full resolution | 0.972 | 68% | — | — |
+| Uniform $24\times24$ | 0.903 | 20% | — | — |
+| Object, 432 pixels | 0.894 | 62% | 0.738 | 0.419 |
+| Goal, 432 pixels | 0.772 | 26% | 0.376 | 0.704 |
+| Object 216 + goal 216 | 0.918 | 46% | 0.568 | 0.628 |
+| Object 216 + decoy 216 | 0.883 | 34% | 0.561 | 0.261 |
+
+The split allocation has the highest reduced-input reward point estimate, but lower exact
+success than object-only allocation. Moving half of the high-resolution pixels away from the
+object reduces object recall from 0.738 to 0.568.
+
+<details>
+  <summary>Paired region-allocation effects</summary>
+
+  | Comparison | Reward difference, 95% CI | Success difference, 95% CI |
+  |---|---:|---:|
+  | Object+goal − uniform | $+0.015\;[-0.054,0.097]$ | $+0.26\;[0.08,0.44]$ |
+  | Object+goal − object | $+0.024\;[-0.057,0.116]$ | $-0.16\;[-0.32,0.02]$ |
+  | Object+goal − goal | $+0.147\;[0.071,0.227]$ | $+0.20\;[0.02,0.38]$ |
+  | Object+goal − decoy | $+0.035\;[-0.035,0.109]$ | $+0.12\;[-0.06,0.30]$ |
+  | Full − object+goal | $+0.054\;[-0.006,0.106]$ | $+0.22\;[0.02,0.40]$ |
+</details>
+
+A predeclared tradeoff screen required the object+goal allocation to satisfy all three of the
+following:
+
+1. reward noninferiority to uniform sampling within 0.03;
+2. exact-success superiority to uniform sampling;
+3. exact-success noninferiority to object-only allocation within 0.10.
+
+Only the second criterion passed. The 50/50 split is therefore not a free improvement.
+
+## What the controls isolate
+
+- **Full resolution** is the in-distribution reference.
+- **Nominally equal-budget uniform sampling** tests concentrated versus spatially distributed
+  detail under the same reconstruction procedure.
+- **Peripheral-only input** measures what the coarse global stream can support by itself.
+- **Center/goal placement** supplies a simple geometric baseline.
+- **Random placement** tests an arbitrary fovea under the same nominal allocation.
+- **Controlled displacement** gives a dose-response rather than one favorable oracle contrast.
+- **Object versus background deletion** checks whether task-local information matters and
+  exposes possible boundary cues.
+- **The matched decoy** separates goal-specific information from generic two-region coverage.
+- **Exact high-resolution pixel quotas** prevent edge location or region overlap from silently
+  changing the restored-pixel allocation.
+- **Paired rollouts with shared action-sampling randomness** reduce variance in condition
+  differences.
+
+## Interpreting reward and completion
+
+Object-centered foveation and uniform sampling have nearly identical mean maximum rewards:
+0.894 versus 0.903. Their exact success rates are very different: 62% versus 20%.
+
+The paired reward difference is
+
+$$
+-0.009,\qquad95\%\ \mathrm{CI}=[-0.068,0.042].
+$$
+
+No mean-reward advantage was detected, and this interval does not establish equivalence. The
+paired exact-success difference is
+
+$$
++0.42,\qquad95\%\ \mathrm{CI}=[0.26,0.58].
+$$
+
+A careful reading is that uniform sampling often preserves enough distributed information to
+approach the target, while object-centered detail changes how often the controller crosses the
+final completion threshold.
+
+The allocation study adds a second lesson. Object+goal has a slightly higher reward point
+estimate than object-only, but exact success falls from 62% to 46%. This is consistent with
+budget dilution, not proof that global planning improved. Likewise, the object+goal comparison
+with object+decoy is inconclusive; its intervals cross zero. The study establishes neither that
+goal detail is irrelevant nor that it provides a goal-specific benefit.
+
+## What this study establishes
+
+For this frozen UVA policy and PushT setting:
+
+1. the unadapted policy extracts useful information from a dense foveated reconstruction;
+2. placement quality has a strong graded relationship with closed-loop performance;
+3. manipulated-object detail is the dominant requirement for exact completion at this nominal
+   allocation;
+4. foveation is a **budget-allocation problem**, not merely a gaze-coordinate problem;
+5. adding a second region can hurt when it makes the primary region too coarse.
+
+## What it does not establish
+
+- **No speedup was measured.** UVA still processes a dense image through its unchanged visual
+  stack.
+- **This is not true mixed-resolution-token inference.** The intervention reconstructs a
+  same-shaped raster.
+- **The policy was not adapted to foveated observations.** These are frozen-model sensitivity
+  results, not achievable performance after matched training.
+- **The oracle is post-acquisition and privileged.** It examines the current full-resolution
+  frame and does not reduce camera readout.
+- **The oracle is not human gaze.** It is a simulator-derived object selector.
+- **Foveated performance was not shown equivalent to full resolution.** Full resolution reached
+  68% success versus 62% object-centered, and the uncertainty still permits a meaningful
+  difference. Full resolution also had higher mean maximum reward.
+- **The object centroid was not proven globally optimal.** It is one useful upper-bound
+  location.
+- **A moving mask can carry a location cue.** Not every effect can be attributed exclusively to
+  recovered texture.
+- **PushT has a fixed centered goal.** It is a weak task for isolating the value of
+  goal-specific detail.
+- **The result is task- and model-specific.** It does not establish transfer to physical
+  sensing, other robot tasks, or other world-action architectures.
+- **Action-sampling replication remains limited.** The paired assay controls one common
+  sampling realization; broader replication is needed for a definitive policy-level estimate.
+- **Object and goal recall are diagnostics.** Vectorized evaluation can repeat terminal
+  observations, so these averages are not unbiased per-decision measurements.
+
+## Why this matters for the gaze study
+
+The PushT study answers the prerequisite question: **selector quality has enough leverage to
+change behavior**. It does not tell us how a practical selector should find the useful region.
+
+The next study therefore moves from a privileged object oracle to source-consistent learned
+gaze on GIAVA thread needle. There, each gaze source trains its own complete downstream policy.
+That experiment asks whether task-domain predicted gaze, generic visual saliency, fixed spatial
+priors, and uniformly coarse vision remain distinguishable after the policy has adapted to each
+observation distribution.
+
+Together, the two studies separate mechanism from implementation:
+
+1. **PushT:** under a fixed nominal source-resolution allocation, where detail is preserved
+   affects control.
+2. **GIAVA:** practical gaze sources differ after matched policy training.
+3. **Next:** use action-conditioned relevance from a capable VLA or world-action model to
+   supervise a small causal selector.
+
+The resulting selector should observe only information available before acquisition—low-resolution
+context, language, proprioception, and history—and allocate high-resolution sensing for a lighter
+downstream policy. Only then can we test genuine token, latency, or sensor-bandwidth savings.
+
+## References
+
+- Shuang Li, Yihuai Gao, Dorsa Sadigh, and Shuran Song. [Unified Video and Action
+  Model](https://arxiv.org/abs/2503.00200), 2025.
+- Cheng Chi et al. [Diffusion Policy: Visuomotor Policy Learning via Action
+  Diffusion](https://arxiv.org/abs/2303.04137), 2023.

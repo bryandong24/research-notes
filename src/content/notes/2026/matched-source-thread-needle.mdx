@@ -1,0 +1,269 @@
+---
+title: "Matched-source policies on thread needle"
+summary: "Seven source-consistent policies isolate achievable control performance from the distribution shift created by swapping a new fovea into a frozen policy."
+publishedAt: 2026-07-28
+eyebrow: "Control study · Thread needle"
+status: preliminary
+featured: false
+kind: experiment
+seriesOrder: 4
+readingMinutes: 14
+---
+
+The gaze-source comparison becomes meaningful only when the downstream action policy is trained
+on the same visual distribution that it will receive during rollout.
+
+That is the purpose of this experiment. We trained three complete policies for each of seven
+visual conditions, then evaluated every policy on the same 50 simulator initializations. The
+result is 150 rollouts per condition and a paired comparison across both policy-training
+variation and environment variation.
+
+The main finding is:
+
+> A source-consistent policy using task-specific predicted gaze reached 86.0% exact success,
+> compared with 70.0% for generic DeepGaze-MIT and 53.3% for uniformly coarse vision.
+
+This is the primary closed-loop result in the series. It is narrower than “foveation beats full
+resolution” and stronger than the earlier frozen source-swap result.
+
+## The policy interface
+
+The action policy does not consume the blurred-square visualization shown in our videos. It
+uses GIAVA's multiresolution tokenizer.
+
+Given current image $I$, gaze point $g$, and proprioceptive state $q$, the visual path is
+
+$$
+c_{\mathrm{vis}}
+=
+\operatorname{Pool}
+\left(
+\operatorname{ViT}\left(T_{\mathrm{fov}}(I,g)\right)
+\right).
+$$
+
+The image is resized to $288\times288$, and $T_{\mathrm{fov}}$ extracts approximately 20
+tokens in three nested bands:
+
+- four stride-1 tokens in a $32\times32$ core;
+- eight stride-2 tokens in the surrounding region out to $96\times96$;
+- eight stride-6 tokens across the remaining $288\times288$ context.
+
+The policy also receives gaze numerically:
+
+$$
+c_{\mathrm{state}}=\operatorname{MLP}([q,g]).
+$$
+
+Consequently, the experiment compares complete gaze-conditioned pipelines. It does not yet
+isolate high-resolution placement from the information carried by the two gaze coordinates.
+
+An attention pool compresses the ViT sequence into conditioning tokens for an
+[action DiT](https://arxiv.org/abs/2212.09748). The action head is trained by
+[conditional flow matching](https://arxiv.org/abs/2210.02747). Let $a_1$ be a demonstration
+action chunk, $a_0\sim\mathcal N(0,I)$, and $t\sim\mathcal U(0,1)$. With the straight
+conditional path
+
+$$
+a_t=(1-t)a_0+ta_1,\qquad u_t=a_1-a_0,
+$$
+
+the objective is
+
+$$
+\mathcal L_{\mathrm{FM}}
+=
+\mathbb E
+\left[
+\left\|
+v_\theta(a_t,t\mid c_{\mathrm{vis}},c_{\mathrm{state}})
+-u_t
+\right\|_2^2
+\right].
+$$
+
+At rollout, sampling begins from Gaussian noise and integrates the learned vector field in
+eight steps. The model predicts a 16-action horizon and executes a short action chunk before
+replanning.
+
+## Seven source-consistent conditions
+
+| ID | Visual condition | Gaze during training | Gaze during rollout |
+|---|---|---|---|
+| A | Foveated | task-specific GIAVA U-Net | the same frozen U-Net |
+| B | Foveated | geometric center | center |
+| C | Foveated | stationary training-gaze KDE mode | the same fixed point |
+| D | Foveated | DeepGaze IIE with MIT prior | the same DeepGaze system |
+| E | Foveated | DeepGaze IIE with uniform prior | the same DeepGaze system |
+| Full | Full-resolution ViT | none | none |
+| Low | Uniform low-resolution ViT | none | none |
+
+The foveated conditions use the same multiresolution architecture and pretrained foveated
+vision initialization. The full and low conditions use their corresponding released vision
+initializations and are therefore contextual anchors rather than architecture-identical
+resolution ablations.
+
+For A–E, source resolution precedes the same small Gaussian coordinate noise during training;
+noise is disabled during evaluation. The gaze source is frozen. The foveated ViT, attention
+pool, projection layers, proprioceptive projection, and action DiT are trainable.
+
+All policies use the same 160 training demonstrations and the same optimization schedule:
+
+- 30,000 updates with batch size 64;
+- 500-update warmup followed by cosine decay;
+- lower learning rate for the vision backbone than the newly initialized policy layers;
+- exponential moving average with decay 0.99;
+- action horizon 16 and eight flow-sampling steps;
+- no rollout-based model selection—the fixed final EMA weights are evaluated.
+
+The 20 QA and 20 blind demonstrations are excluded from downstream policy training.
+
+## Outcome definition
+
+Thread needle has a discrete five-stage simulator reward based on contact and object state:
+
+1. the right gripper touches the needle;
+2. it holds the needle off the table;
+3. the needle contacts the wall;
+4. the threading condition is triggered;
+5. the left gripper holds the threaded needle after the right gripper releases it correctly.
+
+The primary endpoint is exact stage-5 success. Maximum stage and stage-reach rates show where a
+policy fails, but they do not replace the success endpoint.
+
+## IID results
+
+Each condition below contains three independently trained policies, each evaluated on the same
+50 initial conditions. Intervals use a paired hierarchical bootstrap that resamples policy
+training runs and their shared environment cases together.
+
+| Condition | Run 1 / 2 / 3 successes | Aggregate success, 95% CI | Difference from A, percentage points |
+|---|---:|---:|---:|
+| A: GIAVA predicted gaze | 42/50, 44/50, 43/50 | **86.0%** [80.0, 91.3] | reference |
+| B: center | 33/50, 26/50, 36/50 | 63.3% [50.7, 74.7] | -22.7 [-37.3, -8.7] |
+| C: training-gaze KDE | 35/50, 33/50, 39/50 | 71.3% [62.0, 80.0] | -14.7 [-26.0, -4.0] |
+| D: DeepGaze-MIT | 39/50, 32/50, 34/50 | 70.0% [60.0, 80.0] | -16.0 [-28.0, -3.3] |
+| E: DeepGaze-uniform | 26/50, 23/50, 31/50 | 53.3% [42.7, 64.0] | -32.7 [-45.3, -20.0] |
+| Full-resolution anchor | 37/50, 34/50, 26/50 | 64.7% [51.3, 76.7] | -21.3 [-36.0, -7.3] |
+| Uniform low-resolution anchor | 24/50, 27/50, 29/50 | 53.3% [44.0, 62.7] | -32.7 [-42.7, -22.0] |
+
+The task-specific pipeline has the highest point estimate and each primary foveated comparison
+is below it with a paired interval excluding zero. DeepGaze-MIT and the stationary KDE have
+higher point estimates than the weakest conditions, so matched training resolves the
+uninformative all-zero floor seen in the source-swap study. We do not call those latter
+pairwise differences statistically established here: the table reports paired intervals
+against A, not C- or D-versus-each-weaker-condition intervals.
+
+The stage funnel localizes the difference:
+
+| Condition | Stage 1 | Stage 2 | Stage 3 | Stage 4 | Stage 5 |
+|---|---:|---:|---:|---:|---:|
+| A: GIAVA predicted gaze | 100.0% | 100.0% | 100.0% | **88.7%** | **86.0%** |
+| B: center | 100.0% | 99.3% | 99.3% | 76.7% | 63.3% |
+| C: training-gaze KDE | 100.0% | 100.0% | 100.0% | 80.0% | 71.3% |
+| D: DeepGaze-MIT | 100.0% | 100.0% | 100.0% | 78.0% | 70.0% |
+| E: DeepGaze-uniform | 100.0% | 100.0% | 100.0% | 66.7% | 53.3% |
+| Full-resolution anchor | 100.0% | 100.0% | 100.0% | 72.7% | 64.7% |
+| Uniform low-resolution anchor | 99.3% | 99.3% | 99.3% | 62.7% | 53.3% |
+
+Nearly every policy reaches the needle and wall. The conditions separate at threading and
+handoff, where small external geometry matters most.
+
+Secondary summaries:
+
+| Condition | Mean maximum stage | Mean episode length | Mean valid tokens |
+|---|---:|---:|---:|
+| A: GIAVA predicted gaze | **4.75** [4.63, 4.85] | 75.0 | 19.98 |
+| B: center | 4.39 [4.19, 4.57] | 82.4 | 20.00 |
+| C: training-gaze KDE | 4.51 [4.35, 4.67] | 79.6 | 20.00 |
+| D: DeepGaze-MIT | 4.48 [4.31, 4.65] | 80.2 | 20.00 |
+| E: DeepGaze-uniform | 4.20 [4.00, 4.40] | 84.2 | 19.70 |
+| Full-resolution anchor | 4.37 [4.11, 4.61] | 79.8 | 324.00 |
+| Uniform low-resolution anchor | 4.14 [3.97, 4.31] | 83.3 | 20.00 |
+
+## Token-budget fairness
+
+Foveae near an image boundary can lose valid tokens, so a center-biased source could otherwise
+receive a subtle compute advantage. Across A–E, mean valid tokens range from 19.70 to 20.00.
+The relative range is 1.51%, well below the predeclared 10% threshold for an equalized-border
+control.
+
+That closes one narrow explanation for the source ranking. It does not make Full directly
+comparable: Full processes 324 tokens and uses a different pretrained tokenizer.
+
+## OOD continuation
+
+The preregistered continuation advanced the task-specific condition plus the Full and Low
+contextual anchors. The other foveated sources were not evaluated OOD, so the following table
+must not be read as a seven-way robustness ranking.
+
+### Dynamic collidable distractors
+
+This suite adds moving, collidable objects. It changes visual clutter and interaction dynamics,
+not merely the background texture.
+
+| Condition | Run 1 / 2 / 3 successes | Aggregate success, 95% CI | Difference from A |
+|---|---:|---:|---:|
+| A: GIAVA predicted gaze | 35/50, 36/50, 31/50 | **68.0%** [59.3, 76.7] | reference |
+| Full-resolution anchor | 30/50, 17/50, 19/50 | 44.0% [30.7, 59.3] | -24.0 [-40.0, -8.0] |
+| Uniform low-resolution anchor | 10/50, 13/50, 16/50 | 26.0% [17.3, 35.3] | -42.0 [-54.0, -28.0] |
+
+Corresponding mean maximum stages are 3.99, 3.36, and 2.48.
+
+### Compound lighting shift
+
+The lighting suite replaces neutral directional illumination with a randomized-position RGB
+spotlight. All nine evaluated policies score 0/50, or 0/150 after aggregation within each
+condition.
+
+| Condition | Stage 1 | Stage 2 | Stage 3 | Stage 4 | Stage 5 |
+|---|---:|---:|---:|---:|---:|
+| A: GIAVA predicted gaze | 10.0% [3.3, 19.3] | 4.0% [0.7, 8.0] | 1.3% [0.0, 4.7] | 0.0% | 0.0% |
+| Full-resolution anchor | 47.3% [18.0, 72.0] | 14.7% [4.0, 26.0] | 12.0% [2.0, 23.3] | 0.0% | 0.0% |
+| Uniform low-resolution anchor | 0.7% [0.0, 2.7] | 0.0% | 0.0% | 0.0% | 0.0% |
+
+This is a useful negative result, not evidence that the true population success is exactly zero.
+The intervention changes color, position, directionality, spotlight geometry, exposure, and
+possibly preprocessing behavior simultaneously. The endpoint is floor-censored and cannot
+identify which component caused failure.
+
+## What the experiment supports
+
+The cleanest statement is:
+
+> On simulated thread needle, a source-consistent policy using task-specific predicted gaze
+> outperformed source-consistent policies using generic saliency, a stationary gaze prior,
+> image center, or uniformly coarse tokens.
+
+The result also establishes that the advantage is concentrated in the precision-heavy stages
+and is not explained by a meaningful difference in valid foveated token count.
+
+It does **not** establish:
+
+- that recorded human gaze is globally optimal;
+- that foveation outperforms full resolution under an architecture-identical comparison;
+- that visual placement rather than numeric gaze conditioning caused the entire gain;
+- that generic saliency is useless in other robot domains;
+- that the system saves camera readout or sensor bandwidth;
+- that the ranking generalizes beyond this task, camera, and simulator.
+
+The Full result deserves particular care. A's point estimate exceeds Full, but the two
+conditions use different pretrained tokenizers and initializations. Full is an engineering
+anchor, not a causal control for the proposition “less visual information is better.”
+
+## Why the task-specific source may help
+
+The rollout funnel suggests that A preserves the small geometry needed for threading and
+handoff. But control rates alone do not show what each tokenizer actually resolved.
+
+[The mechanism note](/research-notes/2026/why-task-specific-gaze-works/) projects the needle,
+hole, and gripper geometry onto identical observations and assigns each landmark to the exact
+stride band it would receive. It also examines a second unresolved pathway: gaze as a compact
+numeric task-state signal.
+
+## References
+
+- Chuang et al., [GIAVA / Look, Focus, Act](https://arxiv.org/abs/2507.15833)
+- Lipman et al., [Flow Matching for Generative Modeling](https://arxiv.org/abs/2210.02747)
+- Peebles and Xie, [Scalable Diffusion Models with Transformers](https://arxiv.org/abs/2212.09748)
+- Linardos et al., [DeepGaze IIE](https://arxiv.org/abs/2105.12441)

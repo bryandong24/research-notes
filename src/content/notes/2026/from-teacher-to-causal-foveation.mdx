@@ -1,0 +1,586 @@
+---
+title: "From a full-resolution teacher to causal foveation"
+summary: "A staged proposal for converting privileged action-conditioned relevance into a small causal selector, validating counterfactual resolution utility, and integrating sensing with a WAM only when predictive feedback helps."
+publishedAt: 2026-07-28
+eyebrow: "Research proposal · Generalist foveation"
+status: proposal
+featured: false
+kind: roadmap
+seriesOrder: 6
+readingMinutes: 16
+---
+
+The current experiments establish that high-resolution placement matters and that a
+task-domain gaze predictor can outperform generic image saliency. They do not solve the
+general case.
+
+For a new task, collecting human eye tracking and training a task-specific gaze model each time
+is expensive. A generic saliency model is easy to deploy, but it answers “what attracts human
+fixation in an image?” rather than “where would additional spatial resolution change this
+robot's next action?”
+
+The proposed bridge is knowledge distillation:
+
+```text
+large full-resolution VLA or WAM, used offline
+→ action-conditioned visual relevance
+→ counterfactual resolution-utility labels
+→ small causal foveation policy
+→ lightweight matched-source VLA or WAM
+```
+
+The large teacher is deliberately absent from the efficient runtime path. Its role is to provide
+privileged supervision that would be too expensive—or causally impossible—to compute during
+deployment.
+
+## What the existing evidence changes
+
+Two observations motivate the program.
+
+First, a fixed-budget PushT assay showed that preserving detail around the manipulated object
+was substantially more useful than uniformly distributing the same source-image resolution.
+Second, in thread needle, a policy trained and evaluated with task-domain predicted gaze
+reached 86% exact success, versus 70% with DeepGaze-MIT and 53.3% with uniformly low-resolution
+tokens.
+
+The narrow conclusion is:
+
+> A selector is part of the control system. It matters whether the selector follows
+> action-relevant task geometry rather than generic visual saliency.
+
+Several stronger claims remain open. The present task-specific predictor is not
+language-conditioned, its gaze coordinate is also given numerically to the policy, and the
+experiments are post-acquisition rather than true active sensing. Human-like gaze is therefore
+a strong reference, not assumed robot-optimal ground truth.
+
+## Synthetic task utility without hand-coded object masks
+
+Synthetic utility should not mean manually labeling a “hand,” “needle,” “hole,” or “object” and
+declaring it important. Those labels help interpret a result, but they should not define the
+selector.
+
+Instead, start with a semantically neutral grid or continuous spatial sampler. Let downstream
+action behavior determine where higher resolution has value.
+
+Let:
+
+- $x^{HR}$ be a full-resolution observation;
+- $x^{LR}$ be its low-resolution counterpart;
+- $F(x^{HR},x^{LR},m)$ restore region $m$ at high resolution;
+- $\pi_T$ be a competent teacher evaluated on its native full-resolution input;
+- $\pi_R$ be a mask-robust evaluator or student trained to consume randomized
+  low-/mixed-resolution allocations;
+- $q$ be robot state and $l$ be the instruction.
+
+The distinction between $\pi_T$ and $\pi_R$ is essential. The full-resolution teacher supplies
+the target action distribution,
+
+$$
+y_T=\pi_T(x^{HR},q,l),
+$$
+
+while the mask-robust evaluator estimates how much of that target survives a candidate
+allocation. Before labeling masks, train $\pi_R$ on randomized allocations:
+
+$$
+\mathcal L_R
+=
+\mathbb E_{m\sim p_{\mathrm{rand}}}
+\left[
+D\left(
+\pi_R(F(x^{HR},x^{LR},m),q,l),
+y_T
+\right)
+\right].
+$$
+
+The randomization should span position, scale, number of regions, and the all-low-resolution
+case. Held-out mask patterns and demonstration actions then test whether $\pi_R$ is genuinely
+allocation-robust rather than merely adapted to one renderer.
+
+### Mask-robust teacher-consistency utility
+
+For a candidate mask $m$:
+
+$$
+U_{\mathrm{teacher}}(m)
+=
+-D\left(
+\pi_R(F(x^{HR},x^{LR},m),q,l),
+y_T
+\right).
+$$
+
+$D$ can compare action distributions, flow fields, or sampled action trajectories. The useful
+mask is the one that best preserves what the teacher would do with full-resolution input.
+
+A cheaper direct-perturbation screen replaces $\pi_R$ with $\pi_T$ and evaluates the
+full-resolution teacher on foveated inputs. That shortcut is only preliminary unless the
+teacher has independently demonstrated robustness to those allocations: otherwise the score
+mixes information loss with an out-of-distribution response to the renderer.
+
+### Demonstration-action utility
+
+When a demonstration action $a^*$ is available:
+
+$$
+U_{\mathrm{BC}}(m)
+=
+-\mathcal L_{\mathrm{action}}\left(
+\pi_R(F(x^{HR},x^{LR},m),q,l),
+a^*
+\right).
+$$
+
+This asks which allocation most supports the demonstrated behavior. It is useful when the
+teacher's full-resolution action is not the only acceptable trajectory, but it also inherits
+demonstration noise and multimodality.
+
+### Resolution-upgrade value
+
+Ordinary saliency identifies important regions in a full-resolution image. Foveation needs a
+more specific quantity: **where does changing low resolution into high resolution add useful
+information?**
+
+$$
+\Delta U(m)
+=
+D\left(
+\pi_R(x^{LR},q,l),
+y_T
+\right)
+-
+D\left(
+\pi_R(F(x^{HR},x^{LR},m),q,l),
+y_T
+\right).
+$$
+
+A large object can be semantically important yet remain recognizable when coarse. It may have
+high saliency and low $\Delta U$. A small contact boundary can have modest global saliency but
+large resolution-upgrade value.
+
+That distinction is the central target of this proposal.
+
+### Soft and multi-region targets
+
+Many frames have more than one useful allocation. Convert utilities to a distribution:
+
+$$
+p_T(m)
+=
+\operatorname{softmax}\left(U(m)/\tau\right).
+$$
+
+For multiple foveae, estimate conditional marginal value:
+
+$$
+\Delta U(m_j\mid m_1,\ldots,m_{j-1}).
+$$
+
+This permits object-target pairs, two hands, or exploratory coverage without hard-coding
+semantic categories.
+
+## Candidate signals from a full-resolution teacher
+
+A capable VLA or WAM exposes several possible relevance signals:
+
+1. action-query attention to visual tokens;
+2. [attention rollout](https://arxiv.org/abs/2005.00928) across residual layers;
+3. gradient-weighted attention;
+4. gradients of action outputs or action loss with respect to visual tokens;
+5. patch deletion sensitivity;
+6. low-to-high-resolution restoration value;
+7. action-distribution entropy reduction;
+8. ensemble or world-model uncertainty reduction;
+9. attention to predicted future visual state.
+
+For a flow-matching action decoder with vector field $v_\theta$, one gradient map is:
+
+$$
+R_i
+=
+\mathbb E_{\tau,\epsilon}
+\left\|
+\frac{\partial v_\theta(a_\tau,\tau,c)}
+     {\partial h_i^{\mathrm{visual}}}
+\right\|.
+$$
+
+The expectation over flow times and action noise avoids interpreting one arbitrary denoising
+state.
+
+Different WAM families expose different causal paths:
+
+| Teacher family | Relevance path to inspect |
+|---|---|
+| VLA with action decoder | Action queries or action loss to visual-language hidden states |
+| IDM-style WAM | Inverse-dynamics output to predicted future visual features |
+| Single-backbone WAM | Action output channels to shared current/future visual tokens |
+| MoT WAM | Action expert to current-video and future-video expert states |
+| Spatial latent WAM | Action loss or uncertainty to grounded latent tokens |
+
+## Attention is a hypothesis, not a label
+
+Raw attention is appealing because it is available in one forward pass. It is not guaranteed to
+measure causal importance; [attention weights can fail to provide faithful explanations of a
+model's prediction](https://arxiv.org/abs/1902.10186).
+
+- Residual paths and MLPs can bypass an attention edge.
+- Heads and layers specialize differently.
+- High attention does not imply that high spatial resolution is necessary.
+- Attention can highlight the robot itself even when proprioception already represents its
+  configuration.
+- A visually subtle contact boundary can have low attention but high action sensitivity.
+
+Every attention-derived map must therefore pass a counterfactual test:
+
+> Under the same visual budget, does preserving its top-ranked region retain action behavior
+> better than preserving center, random, shuffled, low-ranked, stationary-prior, or generic
+> saliency regions?
+
+Agreement with recorded human gaze is valuable for interpretation. It is not sufficient for
+promotion. A map that disagrees with human fixation but preserves control more effectively may
+be the better robot sensing target.
+
+## The deployable selector
+
+The selector should operate before current high-resolution measurements are available:
+
+$$
+\hat G_{t+\Delta}
+=
+f_\phi(
+x^{LR}_{\leq t},
+q_{\leq t},
+l,
+a_{<t},
+r^{HR}_{<t}
+).
+$$
+
+Inputs include:
+
+- current and recent low-resolution global observations;
+- instruction;
+- proprioception;
+- earlier actions;
+- past high-resolution crops and their locations.
+
+Outputs can include:
+
+- a probability distribution over spatial patches;
+- top-$K$ ROI centers;
+- requested spatial scales;
+- confidence or an exploration score.
+
+At time $t$, the causal sequence is:
+
+1. observe $x_t^{LR}$ and the history of earlier crops;
+2. predict $G_{t+\Delta}$;
+3. acquire the selected high-resolution region;
+4. give global and ROI tokens to the action model;
+5. update memory and replan.
+
+The selector cannot use the same current high-resolution crop it is deciding whether to
+acquire. Full-resolution frames are valid during offline target construction, not as deployment
+inputs.
+
+### Representation for the downstream model
+
+A native representation should expose the sensing structure:
+
+```text
+low-resolution global tokens
++ high-resolution ROI tokens
++ position and scale embeddings
++ explicit validity or mask metadata
+```
+
+A blurred-periphery image resized back to the model's expected dimensions is useful for
+compatibility studies. It does not reduce token computation unless the downstream encoder also
+changes.
+
+### Selector objective
+
+A general selector can combine:
+
+$$
+\mathcal L_g
+=
+\lambda_p\mathcal L_{\mathrm{proxy}}
++\lambda_u\mathcal L_{\mathrm{utility}}
++\lambda_h\mathcal L_{\mathrm{human}}
++\lambda_b\mathcal L_{\mathrm{budget}}
++\lambda_t\mathcal L_{\mathrm{temporal}}
++\lambda_d\mathcal L_{\mathrm{diversity}}.
+$$
+
+- $\mathcal L_{\mathrm{proxy}}$ distills teacher relevance.
+- $\mathcal L_{\mathrm{utility}}$ preserves actions or downstream task behavior.
+- $\mathcal L_{\mathrm{human}}$ optionally uses human gaze as an auxiliary prior.
+- $\mathcal L_{\mathrm{budget}}$ enforces a fixed high-resolution allocation.
+- $\mathcal L_{\mathrm{temporal}}$ represents sensor latency and discourages unnecessary jumps.
+- $\mathcal L_{\mathrm{diversity}}$ keeps multiple ROIs from collapsing to one point.
+
+For discrete hard selection, possible estimators include Gumbel top-$K$, straight-through
+gradients, offline enumeration, or policy gradients. The spatial grid is merely a sensor-action
+space; it does not encode object identity.
+
+## Why the selector and action model should not begin from scratch together
+
+Fully joint optimization permits arbitrary co-adaptation. A selector can choose an initially
+meaningless region while the student learns to decode a spurious cue from that region. The pair
+may work together but fail to reveal generally useful visual allocation.
+
+A safer curriculum is:
+
+1. train or reuse a competent full-resolution teacher;
+2. train the foveated student with randomized masks so it can consume varied allocations;
+3. distill validated teacher relevance into the selector;
+4. freeze or mostly freeze the student while optimizing the selector for utility;
+5. jointly fine-tune selector and student at a small learning rate;
+6. evaluate with the same frozen selector distribution used during training.
+
+Matched-source evaluation is essential. Swapping a new foveation pattern into a policy trained
+on a different pattern confounds selector quality with visual distribution shift.
+
+## Mode A and Mode B are different scientific claims
+
+### Mode A: post-acquisition allocation
+
+```text
+current full-resolution image
+→ choose a fovea
+→ reduce downstream visual computation
+```
+
+Mode A can establish that resolution placement affects a model and may reduce downstream
+compute. It cannot claim reduced camera readout or sensor bandwidth because the selector already
+saw the full-resolution image.
+
+### Mode B: acquisition-time foveation
+
+```text
+current low-resolution global view + past high-resolution crops
+→ choose the next ROI
+→ acquire only that high-resolution region
+```
+
+Only Mode B supports an acquisition-bandwidth claim. The existing experiments are Mode A; the
+causal selector above is intended to cross into Mode B.
+
+If a tiny target cannot be detected in the global stream, no one-step Mode-B selector can
+recover it reliably. The principled responses are recurrent belief, exploratory scanning,
+multiple ROIs, or a somewhat richer global stream—not hidden access to the current
+full-resolution frame.
+
+## The staged experimental program
+
+### Gate 0 — decompose the current mechanism
+
+Before making generalist claims:
+
+- separate multiresolution token placement from the numeric gaze-coordinate side channel;
+- compare identical predictor architectures trained on task gaze versus generic-saliency
+  supervision.
+
+This determines what the present task-specific advantage actually measures.
+
+### Gate 1 — audit generalist relevance
+
+On a common observation panel, extract:
+
+- raw attention;
+- attention rollout;
+- gradient relevance;
+- action-output gradients;
+- patch deletion;
+- resolution restoration.
+
+Compare with task-specific predicted gaze, recorded human gaze, generic saliency, stationary
+task priors, center, random, and shuffled maps.
+
+**Advance criterion:** a proxy must beat simple priors and generic saliency on counterfactual
+restoration utility—not merely correlate with human gaze.
+
+### Gate 2 — measure causal foveation-value curves
+
+At several visual budgets:
+
+1. begin with the same low-resolution frame;
+2. restore the top-ranked patch or top-$K$ patches;
+3. measure full-resolution teacher-action fidelity;
+4. estimate incremental value per high-resolution token;
+5. identify thresholds and plateaus.
+
+Report curves by task and phase. A selector may matter most near grasping, insertion, contact,
+or occlusion even if episode-average fidelity changes only modestly.
+
+### Gate 3 — distill a generalist selector
+
+Train from low-resolution context, instruction, state, and short history. Use task-level—not
+frame-level—held-out splits.
+
+Evaluate:
+
+- zero-shot relevance on unseen tasks;
+- causal action-fidelity curves;
+- selector memory and latency;
+- behavior when current high-resolution input is explicitly absent.
+
+### Gate 4 — few-shot task adaptation
+
+Fine-tune the generalist selector with 1%, 5%, 10%, and 100% of:
+
+- task-domain human gaze;
+- task-domain causal-utility labels;
+- or a hybrid.
+
+Compare it with a task-specific selector trained from scratch on the same quantity of data. The
+question is whether generalist pretraining reduces task-specific supervision.
+
+### Gate 5 — train lightweight matched-source policies
+
+Carry only the strongest selectors into complete policy training:
+
+- task-domain reference;
+- zero-shot generalist selector;
+- few-shot human-adapted selector;
+- few-shot utility-adapted selector;
+- generic saliency and geometric anchors.
+
+Every policy must train and roll out with its own frozen selector. Measure exact closed-loop
+success, failure stage, visual budget, selector-plus-policy latency, and robustness to visual
+shifts.
+
+### Gate 6 — test WAM feedback before integration
+
+Using the strongest standalone selector, compare:
+
+| Variant | Additional selector information |
+|---|---|
+| Independent | Low-resolution view, instruction, state, history |
+| Action feedback | Action hidden state, entropy, or ensemble disagreement |
+| Video feedback | Predicted visual state or future uncertainty |
+| Combined feedback | Both action and video signals |
+
+Only causally available state can guide the next acquisition decision.
+
+### Gate 7 — add a native gaze head or expert only if warranted
+
+If feedback yields a reproducible benefit on predictive tasks, integrate foveation:
+
+- attach a gaze head to shared states in a single-backbone model;
+- use a dedicated foveation expert in an MoT only if specialization is useful;
+- post-train video pathways on mixed-resolution observations before interpreting generated
+  foveated futures;
+- predict a receding-horizon sensing plan, execute one ROI, observe, and replan.
+
+The standalone selector is not a temporary placeholder. It is the necessary baseline and may be
+the best deployable system.
+
+## A possible WAM-native objective
+
+For video, action, and foveation outputs:
+
+$$
+\mathcal L
+=
+\mathcal L_{\mathrm{action}}
++\alpha\mathcal L_{\mathrm{world}}
++\beta\mathcal L_{\mathrm{gaze}}
++\gamma\mathcal L_{\mathrm{utility}}
++\delta\mathcal L_{\mathrm{budget}}
++\eta\mathcal L_{\mathrm{temporal}}.
+$$
+
+The gaze term can begin as teacher distillation and gradually shift toward downstream utility.
+Training should include randomized or imperfect masks and the selector's own predictions to
+reduce closed-loop drift.
+
+A native MoT version might contain:
+
+```text
+video expert      → future state, motion, occlusion, uncertainty
+action expert     → intended trajectory and action uncertainty
+foveation expert  → ROI centers, scales, and scanpath
+```
+
+Shared attention can make sensing both action-conditioned and predictive. Strict attention masks
+must enforce this chronology:
+
+- before choosing $G_t$, the gaze stream can see current low-resolution and past
+  high-resolution tokens;
+- it cannot see unselected current high-resolution tokens;
+- after acquisition, action and video streams can consume the selected current tokens;
+- full current or future frames appear only in offline targets and teacher losses.
+
+Without that contract, the model can appear to learn active sensing while quietly reading the
+measurement it claims to avoid.
+
+## Three evaluation axes that must remain separate
+
+1. **Human-gaze agreement:** does a selector resemble human fixation?
+2. **Causal information utility:** does its selected detail restore action-relevant information?
+3. **Matched closed-loop control:** does a policy trained with that selector succeed?
+
+Efficiency is a fourth axis:
+
+4. **End-to-end cost:** does selector plus sensing plus student actually reduce latency,
+   tokens, pixels, power, or bandwidth?
+
+A method can perform well on one axis and poorly on another. Raw attention might resemble human
+gaze but fail restoration. Synthetic utility might disagree with gaze and improve control. A
+good selector might still be too slow to yield a net systems benefit.
+
+## Main risks and the corresponding controls
+
+| Risk | Consequence | Control |
+|---|---|---|
+| Raw attention is non-causal | Attractive heatmaps produce poor foveae | Require deletion, restoration, and rollout tests |
+| Teacher-specific bias | The selector distills one model's quirks | Use multiple teachers or checkpoints and soft targets |
+| Tiny target is absent at low resolution | The selector cannot localize it | Memory, exploration, multiple ROIs, richer global stream |
+| Selector and student co-adapt | A brittle private code develops | Random-mask student training and staged freezing |
+| Current full-resolution leakage | False active-sensing result | Causal input contracts and explicit no-HR ablations |
+| One point is insufficient | Object-target interactions are lost | Top-$K$, scale allocation, and diversity loss |
+| Attention measures importance, not resolution need | Already-visible objects dominate | Optimize low-to-high-resolution restoration value |
+| Selector latency consumes the savings | No end-to-end benefit | Small selector, cached history, total latency accounting |
+| Gaze acts as a numeric state hint | Visual allocation effect is confounded | Factor token placement and numeric conditioning |
+| Mixed-resolution WAM generation is unstable | Future artifacts compound | Post-train the video path before autoregressive use |
+| WAM integration adds complexity without value | Expensive negative result | Require a positive feedback ablation first |
+
+## What would count as a useful outcome?
+
+The program has several valid stopping points:
+
+- If attention correlates with human gaze but fails causal restoration, attention is not a
+  sufficient foveation target.
+- If resolution-upgrade utility distills successfully, a small selector can amortize privileged
+  action relevance from a full-resolution teacher.
+- If a few task labels close most of the gap to a task-specific selector, generalist
+  pretraining reduces gaze-data requirements.
+- If the standalone selector matches a native expert, WAM-native foveation is unnecessary.
+- If synthetic utility beats human gaze, robot-optimal sensing differs from human fixation.
+- If human adaptation remains essential, task-specific gaze contains information not recovered
+  by the generalist teacher.
+
+The immediate high-value question is deliberately smaller than building a new WAM:
+
+> Does an existing generalist action model contain a transferable spatial signal whose
+> high-ranked regions causally recover more action information than generic saliency and simple
+> priors?
+
+Only after that answer is positive should the project spend the cost of training a native
+foveation expert.
+
+## References
+
+1. [World Models for Robot Learning: A Survey](https://arxiv.org/abs/2605.00080), 2026.
+2. [Policy-Based Foveated Imaging and Perception](https://arxiv.org/abs/2606.02565), 2026.
+3. [Foveated Diffusion](https://arxiv.org/abs/2603.23491), 2026.
+4. Chuang et al., [Look, Focus, Act: Efficient and Robust Robot Learning via Human Gaze and Active Vision](https://arxiv.org/abs/2507.15833), 2025.
+5. Yuan et al., [Fast-WAM](https://arxiv.org/abs/2603.16666), 2026.
+6. [LingBot-VA: Causal World Modeling for Robot Control](https://arxiv.org/abs/2601.21998), 2026.
+7. Abnar and Zuidema, [Quantifying Attention Flow in Transformers](https://arxiv.org/abs/2005.00928), 2020.
+8. Jain and Wallace, [Attention is not Explanation](https://arxiv.org/abs/1902.10186), 2019.

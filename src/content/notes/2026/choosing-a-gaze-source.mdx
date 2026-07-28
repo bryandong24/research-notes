@@ -1,0 +1,284 @@
+---
+title: "What counts as a good gaze source?"
+summary: "Recorded human gaze, task-specific prediction, and generic saliency agree on some frames but answer different questions—and they must not be compared as if they were interchangeable."
+publishedAt: 2026-07-28
+eyebrow: "Label study · GIAVA"
+status: preliminary
+featured: false
+kind: analysis
+seriesOrder: 3
+readingMinutes: 13
+---
+
+The phrase *gaze source* hides several different objects. A recorded eye-tracker coordinate is
+an observation of one person on one demonstration. A gaze predictor is a model that attempts to
+reproduce that behavior on a new frame. A saliency model estimates where people tend to look in
+ordinary images. A stationary prior encodes where task activity usually occurs without looking
+at the current scene at all.
+
+Those signals can correlate, but they are not interchangeable. More importantly, agreement with
+human gaze and usefulness to a robot policy are separate properties.
+
+This note follows the first three stages of our GIAVA thread-needle study:
+
+1. validate the spatial and temporal interpretation of the gaze data;
+2. compare candidate sources on identical recorded observations;
+3. test what happens when an action policy is given a gaze distribution it never saw during
+   training.
+
+The final step produces a striking negative result, but not the source ranking one might first
+infer from it. That failure is what motivated the matched-source experiment in
+[the next note](/research-notes/2026/matched-source-thread-needle/).
+
+## Six different meanings of “where to look”
+
+The dataset stores a left-eye point for the active ZED-left camera. It is an $(x,y)$ coordinate
+already normalized to $[-1,1]^2$. For an image of width $W$ and height $H$, the corresponding
+pixel coordinate is
+
+$$
+p(g)=\frac{g+1}{2}\odot(W,H).
+$$
+
+We compare the following sources:
+
+| Source | Definition | Image conditioned? | Valid on a new rollout? |
+|---|---|---:|---:|
+| Recorded human gaze | Eye-tracker point from the demonstration | yes, through the operator | no |
+| GIAVA predicted gaze | Task-specific U-Net trained to predict human-like gaze | yes | yes |
+| Stationary human-gaze KDE | QA agreement uses a leave-one-episode-out fit to the other 19 QA episodes; policy experiments use a separate fit to Train160 only | no | yes |
+| DeepGaze-MIT | DeepGaze IIE with its natural-image spatial prior | yes | yes |
+| DeepGaze-uniform | The same DeepGaze weights with a uniform prior | yes | yes |
+| Geometric center | Fixed center of the image | no | yes |
+
+The first distinction is operational. Recorded human gaze belongs to the recorded demonstration
+trajectory. Once an autonomous policy moves differently, there is no synchronized human gaze to
+replay. “Human gaze at rollout” therefore means a learned predictor supervised by human gaze,
+not a live human measurement.
+
+The second distinction is semantic. GIAVA's U-Net was trained in this manipulation domain.
+DeepGaze is a strong model of generic human visual saliency, but it does not receive the task
+instruction, robot state, action history, or manipulation phase. The stationary KDE has even
+less information: it emits one fixed point representing where people tended to look in its
+fitting split. Two different, noninterchangeable fits appear below. The QA20 label study uses a
+leave-one-episode-out (LOEO) KDE fitted separately for each held-out QA episode from the other
+19 QA episodes. The closed-loop studies instead use one KDE mode fitted only to the 160
+policy-training demonstrations.
+
+## Alignment before metrics
+
+Gaze evaluation is unusually vulnerable to silent errors. Swapping $x$ and $y$, interpreting
+$[0,1]$ as $[-1,1]$, flipping the vertical axis, or pairing a gaze sample with the wrong video
+frame can all produce plausible-looking overlays while invalidating the experiment.
+
+We therefore treated alignment as an empirical gate. On 20 held-out QA episodes:
+
+- all 5,000 native video rows aligned with the tabular frame indices and timestamps;
+- the stored convention was confirmed as $(x,y)$ in $[-1,1]^2$;
+- stereo eye separation was primarily horizontal, providing an independent axis-order check;
+- the released GIAVA preprocessing reproduced a known model prediction;
+- videos were inspected at native 25 Hz before any aggregate metric was trusted.
+
+Passing these gates does not mean that every provided coordinate is a directly observed,
+fixation-valid eye-tracker sample. GIAVA fills unlabeled video frames by interpolating between
+eye-tracking labels, and the public release does not preserve the original validity or
+interpolation mask. “Recorded human gaze” in this note therefore means the released,
+frame-aligned trace, which can mix measured samples, saccades or blinks, and interpolated
+coordinates.
+
+The downstream comparison uses 200 systematically sampled frames—ten per episode. That sample
+is useful for configuration-level behavior but is too sparse to characterize short contacts or
+human saccades.
+
+## Agreement with recorded human gaze
+
+Two simple point metrics make the initial comparison tangible.
+
+The first is Euclidean distance from a predicted point $\hat p_t$ to the recorded left-eye point
+$p_t$:
+
+$$
+d_t=\lVert \hat p_t-p_t\rVert_2.
+$$
+
+The second asks whether recorded gaze falls inside a 62-pixel support centered on the source.
+The radius represents the outer support of an early foveation proxy, not the finest region of
+the eventual GIAVA tokenizer.
+
+| Source | Mean distance to recorded gaze | 62-pixel support hit |
+|---|---:|---:|
+| GIAVA predicted gaze | **8.49 px** [6.64, 10.59] | **98.5%** [97.0, 100.0] |
+| QA20 LOEO human-gaze KDE | 41.08 px [38.99, 43.31] | 72.5% [70.0, 75.0] |
+| DeepGaze-MIT | 71.80 px [66.22, 77.85] | 48.0% [41.0, 54.5] |
+| DeepGaze-uniform | 86.24 px [77.31, 95.54] | 42.5% [34.0, 50.5] |
+| Geometric center | 103.91 px [100.74, 106.90] | 1.5% [0.0, 3.0] |
+
+The center baseline is especially weak because thread-needle activity is usually below image
+center in this camera. The stationary KDE captures that task-and-camera prior surprisingly
+well. It is substantially closer to human gaze than either DeepGaze variant despite never
+responding to the current image.
+
+Density metrics show why this does not make DeepGaze meaningless. On a common probability grid:
+
+| Density source | NSS | AUC-Judd | shuffled AUC |
+|---|---:|---:|---:|
+| DeepGaze-MIT | 3.617 | 0.9698 | 0.7022 |
+| DeepGaze-uniform | 3.511 | 0.9672 | 0.7656 |
+| QA20 LOEO human-gaze KDE | **6.582** | **0.9881** | 0.4943 |
+
+Normalized scanpath saliency, or NSS, measures the standardized density value at human
+fixations. Shuffled AUC uses fixations from other episodes as negatives, suppressing spatial
+priors shared across the task. The stationary KDE is consequently excellent on NSS but near
+chance on shuffled AUC. DeepGaze captures image-dependent saliency beyond the fixed prior, yet
+its saliency is less precisely aligned with task-directed human gaze.
+
+The conclusion is not “DeepGaze sees nothing.” It is:
+
+> Generic image saliency contains scene-responsive information, but that information is not the
+> same as task-directed manipulation gaze.
+
+## Temporal stability
+
+A foveation source is a trajectory, not just a set of independent points. If the selected
+location jumps between salient structures, the robot repeatedly reallocates fine tokens and may
+lose the geometry it was tracking.
+
+At the one-second QA sampling interval:
+
+| Point track | Mean step | Steps larger than 62 px |
+|---|---:|---:|
+| Recorded human | 28.97 px | 14.4% |
+| GIAVA predicted gaze | 27.45 px | 12.8% |
+| DeepGaze-MIT | 69.05 px | 43.9% |
+| DeepGaze-uniform | 102.53 px | 62.2% |
+
+These are not native-rate saccade measurements. They show configuration-level instability:
+DeepGaze's maximum-density point often moves between robot hands, links, and other conspicuous
+structures, while the task-specific trace more closely follows the recorded operator.
+
+A lead-lag sweep did not justify an anticipation claim. DeepGaze became closer to later human
+gaze at one offset, but center and the stationary prior improved in the same direction. That
+shared trend could reflect task progression or camera motion rather than DeepGaze predicting
+where a person will look next.
+
+## Does the fovea contain task geometry?
+
+Human agreement is only one axis. A robot may benefit from a non-human fixation if it preserves
+the information needed for control.
+
+We therefore built a policy-free geometry assay from the simulator. For every evaluated frame,
+the recorded robot, object, and active-camera state was restored. The environment's discrete
+contact reward was converted into a monotone progress proxy:
+
+$$
+z_t=\max_{\tau\le t} r_\tau.
+$$
+
+Each progress stage selected two predeclared landmarks—for example, the right gripper and needle
+during acquisition, or the needle tip and target-hole proxy during insertion. The landmarks
+were projected through the moving camera into the image. A source received a hit when its
+62-pixel circle contained a selected projected center.
+
+The circle corresponds to the nominal sampling fraction
+
+$$
+B=
+\frac{\pi r^2}{WH}
++
+\left(1-\frac{\pi r^2}{WH}\right)\frac{1}{16}.
+$$
+
+At $r=62$, $W=640$, and $H=480$, $B=9.94\%$. This is an analytic dense-plus-coarse sampling
+budget, not measured sensor cost and not GIAVA's literal token geometry.
+
+| Fovea source | Phase-relevant landmark recall | Both landmarks in one circle |
+|---|---:|---:|
+| Recorded human | **46.3%** [43.5, 49.0] | 11.5% |
+| GIAVA predicted gaze | **46.3%** [43.2, 49.2] | 12.0% |
+| DeepGaze-uniform | 38.5% [33.3, 44.0] | 11.5% |
+| DeepGaze-MIT | 36.5% [31.8, 41.5] | 10.0% |
+| QA20 LOEO human-gaze KDE | 32.3% [29.5, 35.0] | 5.5% |
+| Geometric center | 5.8% [4.0, 7.7] | 0.5% |
+
+This table changes the ordering. The stationary KDE is a better predictor of average recorded
+gaze than DeepGaze, but DeepGaze covers more of the small phase-dependent landmark set. The KDE
+is concentrated near the eventual target: it is excellent during insertion and poor during
+initial acquisition.
+
+The assay also exposes a limitation of a single point. Even recorded human gaze places both
+selected landmarks inside one primary circle on only 11.5% of frames. Object-target
+interactions may require multiple foveae or learned allocation across scales.
+
+This geometry study is diagnostic, not a definition of optimal gaze. Its phase labels are
+derived from simulator reward, its landmark ontology is incomplete, projected centers ignore
+occlusion, and containment does not prove that resolving the point improves an action.
+
+## The frozen source-swap experiment
+
+The first closed-loop test trained one action policy with the task-specific GIAVA predictor and
+then froze it. During evaluation, only the gaze source was changed.
+
+| Fovea supplied at rollout | Exact success | Mean maximum stage |
+|---|---:|---:|
+| GIAVA predicted gaze | **45/50, 90.0%** | **4.82** |
+| Geometric center | 0/50 | 0.00 |
+| Train160 KDE mode | 0/50 | 0.00 |
+| DeepGaze-MIT | 0/50 | 0.00 |
+| DeepGaze-uniform | 0/50 | 0.00 |
+
+The alternatives did not merely miss the final handoff; none reached the first reward stage.
+The result was unchanged when the substituted point was supplied to both token placement and
+the policy's numeric gaze input. Effective valid-token counts were nearly equal, so a center
+token-count advantage did not explain the collapse.
+
+It would be tempting to call this a decisive gaze ranking. It is not.
+
+The action policy was trained only under the moving GIAVA-U-Net foveation distribution. The KDE
+substitution here is the fixed mode fitted to Train160—not the QA20 LOEO diagnostic above.
+Every alternative changed the distribution of visual tokens at test time, and all four fell to
+the same measurement floor. The experiment establishes **source-swap brittleness**:
+
+> A policy can depend strongly on its training-time foveation distribution, so zero-shot gaze
+> replacement does not estimate what an alternative source could achieve after matched
+> training.
+
+That is why the next experiment trains a complete action policy for each visual regime while
+holding the policy recipe fixed.
+
+## What this stage establishes
+
+Three evaluation axes should remain separate:
+
+1. **Human-gaze agreement:** does a source resemble the recorded operator?
+2. **Task-geometry coverage:** does its support contain a small set of phase-relevant landmarks?
+3. **Closed-loop utility:** can a policy trained with that source complete the task?
+
+GIAVA predicted gaze is strong on the first two axes. DeepGaze is meaningfully
+image-conditioned but weaker on task alignment and stability. The stationary KDE captures a
+powerful camera prior but cannot track changing geometry. None of those observations alone
+determines achievable control performance.
+
+The matched-source control study supplies that missing third axis.
+
+## Limitations
+
+- The released task-specific U-Net likely trained on the same public demonstrations used in
+  this QA panel. Its agreement is an implementation and mechanism check, not clean held-out
+  generalization.
+- Recorded gaze is not necessarily robot-optimal. Human peripheral vision, anticipation, and
+  task knowledge may differ from what a robot policy needs.
+- The released human trace contains interpolated unlabeled frames, and no original
+  fixation-validity or interpolation mask is available. Finite/range checks cannot separate
+  direct measurements from those filled values.
+- DeepGaze and GIAVA differ in architecture, training data, preprocessing, and point readout.
+  This is an operational system comparison, not an architecture-controlled label experiment.
+- The circular support analysis uses privileged simulator geometry and is not the actual
+  multiresolution tokenizer.
+- All current selectors inspect the current full-resolution frame. This is post-acquisition
+  allocation, not an acquisition-time bandwidth result.
+
+## References
+
+- Chuang et al., [GIAVA / Look, Focus, Act](https://arxiv.org/abs/2507.15833)
+- Linardos et al., [DeepGaze IIE](https://arxiv.org/abs/2105.12441)
+- Finn et al., [Deep Spatial Autoencoders for Visuomotor Learning](https://arxiv.org/abs/1509.06113)

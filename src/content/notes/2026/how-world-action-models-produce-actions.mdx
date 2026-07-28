@@ -1,0 +1,398 @@
+---
+title: "How world-action models produce actions"
+summary: "Diffusion, transformers, and WAM architecture describe different parts of a model. This note separates IDM, single-backbone, and Mixture-of-Transformers designs, then shows where foveated sensing can enter each one."
+publishedAt: 2026-07-28
+eyebrow: "Technical background · WAMs"
+status: preliminary
+featured: false
+kind: concept
+seriesOrder: 1
+readingMinutes: 15
+---
+
+World-action models are often grouped by names that mix together three different design
+decisions:
+
+1. **Diffusion or flow matching** specifies how a distribution over videos or actions is
+   learned and sampled.
+2. **A transformer** specifies a token-processing architecture. A **diffusion transformer
+   (DiT)** is the more specific case in which a transformer is parameterized and conditioned
+   to serve as a diffusion or flow denoiser.
+3. **IDM, single-backbone, or Mixture-of-Transformers (MoT)** specifies how world prediction
+   and action generation are connected.
+
+These axes are largely independent. An inverse-dynamics model, a unified backbone, and an MoT
+can all contain generic transformers, and any of their generative stages can use a DiT.
+Conversely, a WAM family is not defined by whether its action sampler uses diffusion, flow
+matching, autoregression, or a deterministic head.
+
+That distinction is useful for foveation. It tells us whether mixed-resolution information is
+entering a world predictor, a shared video-action representation, an action expert, or a
+separate sensing policy.
+
+## A compact diffusion and flow-matching primer
+
+Suppose the desired output is $y$. It could be a future video latent, an action trajectory, or a
+joint video-action state. In a simple [Flow Matching](https://arxiv.org/abs/2210.02747)
+construction, training interpolates between noise $\epsilon$ and data $y$:
+
+$$
+y_\tau=(1-\tau)\epsilon+\tau y,
+\qquad
+v^*=y-\epsilon.
+$$
+
+A neural network learns the corresponding velocity field under context $c$:
+
+$$
+v_\theta(y_\tau,\tau,c)\approx v^*.
+$$
+
+At inference, the sampler begins at noise and integrates this field toward a clean sample.
+Diffusion formulations differ in the path and in whether the network predicts noise, score,
+velocity, or a clean target, but the architectural point is the same:
+
+> When a [DiT](https://arxiv.org/abs/2212.09748) is used, its output at one sampling step is
+> normally a denoising prediction, not the final image or robot command. A generic transformer
+> elsewhere in the WAM may instead produce context features or autoregressive tokens.
+
+After sampling:
+
+- a clean **video latent** is converted to pixels by a visual decoder, commonly a VAE;
+- a clean **action latent** is projected or unnormalized into joint positions, Cartesian
+  deltas, gripper commands, or another robot action space.
+
+The word *decoder* is therefore overloaded. It may refer to the diffusion network, a small
+output projection, or the VAE that turns visual latents into pixels. Those are different
+operations.
+
+## How language enters a video/action diffusion model
+
+A text-conditioned WAM does not usually learn a mapping from raw characters to video latents
+with one arbitrary MLP. A typical path is:
+
+```text
+instruction
+→ tokenizer
+→ pretrained text encoder
+→ text-token embeddings
+→ projection to the WAM's hidden width
+→ cross-attention, token concatenation, or adaptive normalization
+```
+
+The text encoder might be CLIP, T5, or the language pathway of a vision-language model.
+Proprioception and past actions are embedded similarly. These conditioning mechanisms are
+orthogonal to the WAM family: IDM, single-backbone, and MoT systems can all use them.
+
+Let the available context be
+
+$$
+c_t=(o_{\leq t},q_{\leq t},l,a_{<t}),
+$$
+
+where $o$ is visual history, $q$ is robot state, $l$ is language, and $a$ is action history.
+The architectural families differ mainly in what happens next.
+
+## 1. Inverse-dynamics-style WAMs
+
+An inverse-dynamics-style system separates a visual prediction problem from an action inference
+problem:
+
+$$
+\hat z^v_{t+1:t+H}
+=
+W_\psi(o_{\leq t},l),
+$$
+
+$$
+\hat a_{t:t+K}
+\sim
+D_\theta(o_{\leq t},q_t,l,\hat z^v_{t+1:t+H}).
+$$
+
+$W_\psi$ produces a visual plan or predictive representation. $D_\theta$ asks which action
+sequence would connect the present state to that future. The inverse-dynamics stage can be a
+diffusion or flow-matching action model, but the family is defined by this decomposition, not by
+the sampler.
+
+The predicted future also need not cross the model boundary as decoded RGB. The action model can
+consume:
+
+- generated future frames;
+- future VAE latents;
+- spatial tokens from the video model; or
+- intermediate predictive features.
+
+[Video Prediction Policy](https://arxiv.org/abs/2412.14803) is a useful representative. It
+fine-tunes a text-guided video predictor for manipulation, then conditions a diffusion action
+model on representations from that predictor.
+
+### What an IDM is not
+
+If a model takes a proposed action and predicts its consequence,
+
+$$
+\hat o_{t+1}=W(o_t,a_t),
+$$
+
+it is a forward dynamics model. A planner can evaluate many such candidate actions, but that is
+not the same computation as first specifying a visual future and then inferring the actions
+that reach it. Both approaches use world models; only the latter has the characteristic
+inverse-dynamics split.
+
+### Does the IDM also receive the video model's KV cache?
+
+Not normally. A KV cache stores attention keys and values from earlier tokens so an
+autoregressive transformer does not recompute them. It is primarily an execution optimization,
+not a standardized representation of the predicted future.
+
+Independent video and action models usually exchange frames, latents, or features—not an
+opaque cache. A system could explicitly train an action model to consume another transformer's
+cached state, but that is an architectural choice rather than part of the IDM definition.
+
+### Foveation in an IDM pipeline
+
+The simplest path keeps the selector external:
+
+```text
+low-resolution global view + selected high-resolution crops
+→ visual predictor
+→ future visual plan or latent features
+→ inverse-dynamics action model
+```
+
+The predicted future can also help choose the *next* fovea: likely contacts, future object
+positions, and uncertain occlusion boundaries are candidate sensing targets.
+
+A more invasive design makes the predicted future itself mixed-resolution. That requires the
+video model to generate coherent mixed-resolution latents and the IDM to train on the same
+representation. Replacing a familiar uniform future with an unfamiliar mixed-resolution one
+at evaluation time would mostly measure distribution shift.
+
+The benefit of the IDM family is modularity. The cost is that selector error, world-model error,
+and inverse-dynamics error can compound across interfaces.
+
+## 2. Single-backbone WAMs
+
+“Single backbone” means that video and action generation share substantial computation. It does
+not require a single undifferentiated output tensor, nor does it imply that video and action
+have identical decoders.
+
+Two related designs are useful to distinguish.
+
+### Design A: one joint denoiser
+
+Noisy video and action variables are embedded into a common hidden width and processed by one
+multimodal denoising transformer, often a DiT:
+
+$$
+h
+=
+T_\theta\left(
+[E_v(z^v_\tau),E_a(a_\tau),E_c(c_t)],
+\tau
+\right).
+$$
+
+The video-token and action-token subsets are projected back to their own spaces:
+
+$$
+\hat v_v=P_v(h_v),
+\qquad
+\hat v_a=P_a(h_a).
+$$
+
+Here $P_v$ and $P_a$ can be lightweight linear or MLP projections. There may be no second large
+transformer “decoder” after $T_\theta$. But the projections are still predicting the next
+denoising direction. The sampler must integrate those predictions, and the final video latent
+still requires a VAE decoder before it becomes pixels.
+
+The model is unified because the same denoising transformer jointly reasons over video, action,
+text, and state tokens.
+
+### Design B: shared contextual trunk, separate diffusion heads
+
+A second design shares the contextual representation while retaining substantial
+modality-specific denoisers:
+
+$$
+h_{\mathrm{joint}}
+=
+T_\theta(o_{\leq t},q_{\leq t},l,\text{masked future tokens}),
+$$
+
+$$
+\hat v_v
+=
+g_v(z^v_\tau,\tau,h_{\mathrm{joint}}),
+\qquad
+\hat v_a
+=
+g_a(a_\tau,\tau,h_{\mathrm{joint}}).
+$$
+
+The central correction is:
+
+> $h_{\mathrm{joint}}$ is generally conditioning context, not a cleaned video/action latent.
+
+$g_v$ and $g_a$ remain the generative heads that perform modality-specific denoising. This
+allows video and action to use different tensor shapes, objectives, sampling schedules, and
+output parameterizations while benefiting from a shared world/action representation.
+
+[Unified Video Action Model](https://arxiv.org/abs/2503.00200) is a useful example of this
+pattern. Its masked-autoregressive transformer constructs shared context, while dedicated
+diffusion heads produce visual latents and actions.
+
+| Question | Joint denoiser | Shared trunk + heads |
+|---|---|---|
+| Where does most denoising computation occur? | One multimodal transformer | Modality-specific heads conditioned by a shared trunk |
+| What is the shared output? | Hidden states projected to video/action vector fields | Context used by downstream denoisers |
+| Is a small linear output projection enough? | Often, before sampling and the visual VAE | Usually not; each head performs substantial generative work |
+| Can schedules differ by modality? | Possible, but tightly coupled | Natural |
+| Where does specialization live? | Input/output projections and token identity | Dedicated video/action heads |
+
+These are endpoints rather than rigid boxes. Practical systems often share some layers and
+specialize others.
+
+### Foveation in a single backbone
+
+A native mixed-resolution input can be represented as:
+
+```text
+low-resolution global tokens
++ high-resolution ROI tokens
++ location and scale embeddings
++ validity or mask metadata
+```
+
+This is preferable to making the model infer which pixels came from which resolution. A
+same-shaped blurred-periphery raster remains a useful compatibility test, but it does not by
+itself reduce transformer token count.
+
+Because video and action already share hidden states, a small gaze head can predict the next
+ROI from those states. A full third expert may be unnecessary.
+
+Generation-time foveation is a separate problem. If the video head must generate a
+mixed-resolution future, it needs mixed-resolution training or post-training. A video generator
+trained only on uniform token layouts should not be expected to remain coherent after its
+latent geometry is changed.
+
+## 3. Mixture-of-Transformers WAMs
+
+A Mixture-of-Transformers retains modality-specific parameterized streams while allowing their
+tokens to interact:
+
+```text
+video tokens  → video expert ┐
+                              ├→ shared or mixed attention
+action tokens → action expert┘
+```
+
+The streams can have separate embeddings, normalizations, feed-forward layers, time
+conditioning, and output projections. At corresponding layers, shared or mixed attention lets
+the action expert read current or predicted visual state and lets the video expert incorporate
+action information.
+
+This use of *mixture* is not necessarily the sparse router found in a conventional
+mixture-of-experts language model. It often means that modalities retain distinct transformer
+paths but exchange information layer by layer.
+
+[Fast-WAM](https://arxiv.org/abs/2603.16666) is a concrete example: a video DiT expert and
+ActionDiT expert are coupled through mixed attention. Video and action objectives are learned
+together, but action-only inference can reuse visual context without iteratively generating a
+future video. This separates the benefit of predictive video co-training from the cost of
+explicit imagination at every control step.
+
+[LingBot-VA](https://arxiv.org/abs/2601.21998) presents autoregressive video/action modeling,
+asynchronous execution, and KV-cache reuse. One implementation detail matters when comparing
+systems: the currently public LingBot-VA models are described by the authors as
+**shared-backbone releases**. The separated-expert architecture discussed in the paper should
+not be treated as identical to every released checkpoint.
+
+### Foveation in an MoT
+
+There are three increasing levels of coupling:
+
+1. **External selector.** It produces mixed-resolution observations before either expert runs.
+2. **Feedback selector.** A separate selector additionally receives compact, causally available
+   action/video state or uncertainty from the preceding control step.
+3. **Native foveation expert.**
+
+```text
+video expert      → predicts future visual state
+action expert     → predicts an action trajectory
+foveation expert  → predicts the next sensing decision
+```
+
+The third option is architecturally natural because sensing, video, and action already have
+separate roles and a communication interface. It is also the easiest to make causally invalid.
+The gaze expert cannot inspect an unselected current high-resolution token before deciding to
+acquire it.
+
+## The three families side by side
+
+| Family | Core computation | Typical action path | Natural first foveation interface |
+|---|---|---|---|
+| IDM | Visual prediction followed by inverse dynamics | Predicted future features condition a separate action model | External selector; use predicted future to propose contacts |
+| Single backbone | Shared video/action representation with joint or specialized output heads | Shared hidden states condition action denoising | Mixed-resolution tokens plus a gaze head on shared state |
+| MoT | Video and action experts coupled by shared/mixed attention | Action expert reads current or predicted visual state | External or feedback selector; later a dedicated gaze expert |
+| Spatial latent WAM | Predictive latent state without requiring RGB generation | Action reads spatially grounded latent state | Latent uncertainty or affordance maps, when spatial grounding exists |
+
+The families are a continuum. A model should be classified by its actual computational graph,
+not by whether its title contains “world model,” nor by a conceptual diagram that differs from
+the released implementation.
+
+## Input foveation and output foveation are different claims
+
+Foveation can occur at several boundaries:
+
+1. **Sensor allocation:** decide which high-resolution measurements to acquire.
+2. **Input computation:** encode a low-resolution global view and a few high-resolution ROIs.
+3. **Action-conditioned relevance:** use a full-resolution teacher to discover which spatial
+   detail affects actions.
+4. **Future generation:** predict only selected future regions at high resolution.
+
+The first two directly target perception and control cost. The fourth also changes the
+generative model's output distribution and is substantially riskier.
+
+[Foveated Diffusion](https://arxiv.org/abs/2603.23491) provides the relevant warning:
+mixed-resolution token layouts require appropriate post-training; a naive pretrained
+diffusion transformer can produce structural and scale inconsistencies. The same concern
+applies to an autoregressive video WAM, where artifacts may be fed back as future context.
+
+For that reason, the near-term research path is deliberately conservative:
+
+```text
+validate useful fovea placement
+→ train a model to consume varied mixed-resolution inputs
+→ learn a causal standalone selector
+→ test whether WAM state improves that selector
+→ modify future-video generation only if the earlier gates succeed
+```
+
+## A practical terminology checklist
+
+- **Backbone:** the major shared feature-processing network.
+- **Expert:** a modality-specific parameterized transformer stream.
+- **Diffusion/flow head:** predicts the denoising vector for one output space.
+- **Output projection:** maps hidden width to video-latent or action dimensions.
+- **VAE decoder:** maps a sampled visual latent to pixels.
+- **KV cache:** stored attention state used to avoid recomputing history.
+- **Foveation selector:** chooses spatial resolution allocation; it is not automatically part of
+  the action model.
+
+Keeping these objects separate makes the design question precise. The central issue is not
+whether a WAM “has a decoder.” It is which representation carries task-relevant visual detail,
+which computation generates the action, and whether the sensing decision is made before or
+after high-resolution information is available.
+
+## References
+
+1. Hu et al., [Video Prediction Policy](https://arxiv.org/abs/2412.14803), 2024.
+2. Li et al., [Unified Video Action Model](https://arxiv.org/abs/2503.00200), 2025.
+3. Yuan et al., [Fast-WAM: Do World Action Models Need Test-time Future Imagination?](https://arxiv.org/abs/2603.16666), 2026.
+4. LingBot-VA team, [Causal World Modeling for Robot Control](https://arxiv.org/abs/2601.21998), 2026.
+5. [World Models for Robot Learning: A Survey](https://arxiv.org/abs/2605.00080), 2026.
+6. [Foveated Diffusion](https://arxiv.org/abs/2603.23491), 2026.
+7. Lipman et al., [Flow Matching for Generative Modeling](https://arxiv.org/abs/2210.02747), 2023.
+8. Peebles and Xie, [Scalable Diffusion Models with Transformers](https://arxiv.org/abs/2212.09748), 2023.

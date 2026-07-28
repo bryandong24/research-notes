@@ -5,10 +5,14 @@ publishedAt: 2026-07-27
 eyebrow: "Preliminary result · Thread needle"
 status: preliminary
 featured: true
+kind: abstract
+seriesOrder: 0
+readingMinutes: 11
 ---
 
 import Callout from "../../../components/Callout.astro";
 import PipelineDiagram from "../../../components/PipelineDiagram.astro";
+import ResearchSeries from "../../../components/ResearchSeries.astro";
 import StandaloneMediaLink from "../../../components/StandaloneMediaLink.astro";
 import StatStrip from "../../../components/StatStrip.astro";
 import SynchronizedVideoGroup from "../../../components/SynchronizedVideoGroup.astro";
@@ -21,15 +25,6 @@ import { observationSources, rolloutSources } from "../../../lib/sources";
     uniformly coarse vision.
   </p>
 </Callout>
-
-Foveated perception offers a simple bargain: preserve a small region at high resolution and
-represent the periphery more cheaply. The unresolved question is not whether we can build a
-mixed-resolution image or tokenizer. It is **where the high-resolution region should go**.
-
-We tested that question on GIAVA's simulated thread-needle task. Each visual condition trained
-its own complete downstream action policy, and the same gaze source was used during training
-and rollout. This removes a major confound from an earlier source-swap experiment: a model no
-longer fails merely because it encounters an unfamiliar foveation pattern at test time.
 
 <StatStrip
   items={[
@@ -54,6 +49,15 @@ longer fails merely because it encounters an unfamiliar foveation pattern at tes
   ]}
   caption="Exact IID success across three policy-training seeds and 50 paired environment seeds per policy. Rounded here for readability; the appendix reports the full protocol."
 />
+
+Foveated perception offers a simple bargain: preserve a small region at high resolution and
+represent the periphery more cheaply. The unresolved question is not whether we can build a
+mixed-resolution image or tokenizer. It is **where the high-resolution region should go**.
+
+We tested that question on GIAVA's simulated thread-needle task. Each visual condition trained
+its own complete downstream action policy, and the same gaze source was used during training
+and rollout. This removes a major confound from an earlier source-swap experiment: a model no
+longer fails merely because it encounters an unfamiliar foveation pattern at test time.
 
 ## The qualitative difference
 
@@ -96,6 +100,30 @@ Three behaviors are worth noticing:
    distribution reaches 71.3%—a higher point estimate than image center—but it cannot adapt as
    the relevant geometry changes through the episode.
 
+<details>
+  <summary>What the policy actually consumed</summary>
+
+  For gaze source $s_k$, the foveated conditions implement the following pipeline:
+
+  $$
+  g_t=s_k(I_t),\qquad
+  h_t=\operatorname{Pool}\!\left(\operatorname{ViT}_k(T(I_t,g_t))\right),
+  \qquad
+  \hat a_{t:t+15}=\operatorname{Flow}_\theta(h_t,[q_t,g_t]).
+  $$
+
+  $T$ is GIAVA's native multiresolution tokenizer—not the blurred raster shown in the videos.
+  The selector fixes the center of approximately 20 mixed-resolution visual tokens, while
+  $[q_t,g_t]$ supplies proprioception and the numeric gaze coordinate to the action decoder.
+  Every gaze source was frozen, and every action policy was trained and evaluated with the same
+  source distribution. The comparison therefore measures complete, source-consistent sensing
+  and control pipelines rather than a zero-shot gaze swap.
+
+  The [matched-source control study](/research-notes/2026/matched-source-thread-needle/)
+  gives the architecture, training objective, seven-condition matrix, confidence intervals,
+  stage-reach analysis, and robustness results.
+</details>
+
 ## Gaze alone, without policy behavior
 
 The next comparison removes action-policy differences. Every panel replays the **same recorded
@@ -116,7 +144,9 @@ rollout and not a success comparison.
 The distinction between task relevance and ordinary saliency is easiest to see here. DeepGaze is
 a capable model of where people tend to look in natural images. It has no instruction, robot
 state, or notion of manipulation phase. The GIAVA predictor is narrower but has learned the
-regularities of this task domain.
+regularities of this task domain. The [gaze-source study](/research-notes/2026/choosing-a-gaze-source/)
+separates coordinate validation, framewise gaze agreement, task-landmark coverage, and
+closed-loop utility.
 
 That leads to a more precise interpretation:
 
@@ -138,12 +168,23 @@ random location (8%).
 This is a **compatibility and placement assay**, not a speed result. The released UVA policy was
 not retrained for each visual condition, and the experiment simulated foveation in a
 same-shaped raster. Its role in the evidence chain is simply to show that useful detail has
-strong spatial structure before we pay the cost of matched policy training.
+strong spatial structure before we pay the cost of matched policy training. The
+[complete placement study](/research-notes/2026/does-fovea-placement-matter/) reports the
+budget equation, reward definition, confidence intervals, allocation ablation, and negative
+tight-budget result.
+
+## Technical walkthrough
+
+The visual abstract deliberately compresses several distinct claims. The linked notes separate
+the mechanism test, gaze-label study, matched control experiment, mechanism analysis, and
+forward architecture proposal so their assumptions do not blur together.
+
+<ResearchSeries currentId="2026/where-should-a-robot-look" />
 
 ## What changes in the research plan
 
 The strongest result is not that human-like gaze is universally optimal. It is that
-**task-conditioned allocation beats generic visual saliency under matched downstream
+**task-domain-trained allocation beats generic visual saliency under matched downstream
 training**. Human gaze is currently our strongest supervision source, but it may not be the
 best possible target for a robot.
 
@@ -247,7 +288,7 @@ The immediate sequence of experiments is:
   diagnostic before broader interpretation.
 </details>
 
-### References
+## References
 
 - Chuang et al., [GIAVA / Look, Focus, Act](https://arxiv.org/abs/2507.15833)
 - Linardos et al., [DeepGaze IIE](https://arxiv.org/abs/2105.12441)

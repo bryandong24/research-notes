@@ -1,0 +1,121 @@
+---
+import { getCollection } from "astro:content";
+
+interface Props {
+  currentId: string;
+}
+
+const { currentId } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const notes = (await getCollection("notes")).sort(
+  (a, b) => a.data.seriesOrder - b.data.seriesOrder
+);
+const currentIndex = notes.findIndex((note) => note.id === currentId);
+const previous = currentIndex > 0 ? notes[currentIndex - 1] : undefined;
+const next =
+  currentIndex >= 0 && currentIndex < notes.length - 1
+    ? notes[currentIndex + 1]
+    : undefined;
+---
+
+<nav class="series-navigation" aria-label="Research-note series navigation">
+  <div class="series-navigation__heading">
+    <span>
+      {currentIndex === 0
+        ? "Visual abstract"
+        : `Technical walkthrough · Part ${currentIndex} of ${notes.length - 1}`}
+    </span>
+    <a href={`${base}#notes`}>All notes</a>
+  </div>
+  <div class="series-navigation__links">
+    {
+      previous ? (
+        <a href={`${base}${previous.id}/`}>
+          <small>Previous</small>
+          <strong>{previous.data.title}</strong>
+        </a>
+      ) : (
+        <span aria-hidden="true" />
+      )
+    }
+    {
+      next ? (
+        <a class="series-navigation__next" href={`${base}${next.id}/`}>
+          <small>Next</small>
+          <strong>{next.data.title}</strong>
+        </a>
+      ) : (
+        <a class="series-navigation__next" href={base}>
+          <small>End of walkthrough</small>
+          <strong>Return to the note index</strong>
+        </a>
+      )
+    }
+  </div>
+</nav>
+
+<style>
+  .series-navigation {
+    width: min(720px, 100%);
+    margin: 4.5rem auto 1rem;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--rule-dark);
+  }
+
+  .series-navigation__heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--ink-soft);
+    font-size: 0.69rem;
+  }
+
+  .series-navigation__links {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
+
+  .series-navigation__links a {
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .series-navigation__links a:hover strong {
+    color: var(--rust);
+  }
+
+  .series-navigation__links small,
+  .series-navigation__links strong {
+    display: block;
+  }
+
+  .series-navigation__links small {
+    color: var(--ink-soft);
+    font-size: 0.66rem;
+  }
+
+  .series-navigation__links strong {
+    margin-top: 0.2rem;
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .series-navigation__next {
+    text-align: right;
+  }
+
+  @media (max-width: 620px) {
+    .series-navigation__links {
+      grid-template-columns: 1fr;
+      gap: 1.2rem;
+    }
+
+    .series-navigation__next {
+      text-align: left;
+    }
+  }
+</style>

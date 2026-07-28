@@ -1,6 +1,7 @@
 ---
 import { getCollection, render, type CollectionEntry } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import SeriesNavigation from "../components/SeriesNavigation.astro";
 
 export async function getStaticPaths() {
   const notes = await getCollection("notes");
@@ -15,7 +16,12 @@ interface Props {
 }
 
 const { note } = Astro.props;
-const { Content } = await render(note);
+const { Content, headings } = await render(note);
+const outline = headings.filter((heading) => heading.depth === 2);
+const base = import.meta.env.BASE_URL;
+const technicalCount = (await getCollection("notes")).filter(
+  (entry) => !entry.data.featured
+).length;
 const formattedDate = new Intl.DateTimeFormat("en", {
   year: "numeric",
   month: "long",
@@ -30,6 +36,13 @@ const formattedDate = new Intl.DateTimeFormat("en", {
 >
   <article class="note-shell">
     <header class="note-hero">
+      <p class="note-series-context">
+        <a href={`${base}2026/where-should-a-robot-look/`}>Foveated robotics</a>
+        <span aria-hidden="true"> / </span>
+        {note.data.featured
+          ? "Visual abstract"
+          : `Technical walkthrough · Part ${note.data.seriesOrder} of ${technicalCount}`}
+      </p>
       <p class="eyebrow">{note.data.eyebrow}</p>
       <h1>{note.data.title}</h1>
       <p class="note-hero__summary">{note.data.summary}</p>
@@ -41,10 +54,36 @@ const formattedDate = new Intl.DateTimeFormat("en", {
             ? "Preliminary research note"
             : note.data.status.replaceAll("-", " ")}
         </span>
+        <span>{note.data.readingMinutes} min read</span>
       </div>
     </header>
+    {
+      outline.length > 2 && !note.data.featured && (
+        <details class="note-toc" open>
+          <summary>On this page</summary>
+          <nav aria-label="On this page">
+            <ol>
+              {outline.map((heading) => (
+                <li>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        </details>
+      )
+    }
     <div class="note-prose">
       <Content />
     </div>
+    <SeriesNavigation currentId={note.id} />
   </article>
 </BaseLayout>
+
+<script>
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    document.querySelectorAll(".note-toc").forEach((toc) => {
+      toc.removeAttribute("open");
+    });
+  }
+</script>
